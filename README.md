@@ -19,7 +19,7 @@ adb -s SERIAL shell /data/local/tmp/xpad2 install full
 - KernelSU 32547 / UAPI 2 以 late-load 方式在当前 boot 激活；
 - KernelSU Manager v3.2.4（versionCode 32457）；
 - `/data/local/tmp/xpad-install` v0.1.1 锁定构建；
-- BoomInstaller v13.6.0.r7.70badc2、system 服务与普通开机自启动。
+- BoomInstaller v13.6.0.r8.b5fc526、system 服务与普通开机自启动。
 
 再次执行同一命令是幂等的：已经通过包名、版本、证书、哈希和运行时探针验证的项目
 会跳过。普通重启后 APK 和 CLI 保留，只恢复 KSU。
@@ -60,7 +60,14 @@ xpad2 cache path|list|verify|import DIRECTORY|prune|clear
 
 安装普通 APK 不会把临时 Root、simpleperf 授权或 KernelSU Manager 是否存在作为
 预检查条件。APK 会先解析并验证真实 manifest、ABI、v2/v3 签名和内容摘要；签名冲突
-时不会自动卸载应用或清除用户数据。
+时不会自动卸载应用或清除用户数据。首次安装使用 OEM auto 通道；检测到同包已安装且
+证书兼容时，升级使用 UID 1000 Direct PackageInstaller 通道，避免 OEM Provider 接收
+更新请求后不落盘而一直等待。
+
+名称边界保持固定：`BoomInstaller` 是
+[`yoyicue/BoomInstaller`](https://github.com/yoyicue/BoomInstaller) 产生的 Android
+APK；`xpad-installer` 是独立仓库产生的设备 CLI `/data/local/tmp/xpad-install`。
+旧私有仓库名 `xpad2_installer` 已停用，不能再作为任何组件标识。
 
 ## 离线目录缓存
 
@@ -73,7 +80,9 @@ XPAD2_CACHE_DIR=/data/local/tmp/xpad2-cache xpad2 install full
 
 外部缓存必须同时满足：RSA 发布签名有效、catalog 属于当前 `xpad2` 版本、每个条目
 仍在当前 `assets.lock.json` 中、blob 大小和 SHA-256 正确。缓存不能引入产品未锁定的
-新版本；损坏缓存会安全失败，不会执行其中的 ELF。
+新版本；损坏缓存会安全失败，不会执行其中的 ELF。升级 `xpad2` 后，旧版默认托管缓存
+会被明确忽略并回退到当前 ELF 的内嵌制品；通过 `--cache-dir` 或 `XPAD2_CACHE_DIR`
+显式选择的缓存仍保持严格失败，不会静默回退。
 
 ## 诊断
 
@@ -93,6 +102,7 @@ ADB key、配对凭据、token、密码和私钥相关行。
 ```sh
 cargo test --all
 cargo android
+export XPAD2_RELEASE_SIGNING_BACKUP=/path/to/protected/signing-backup
 tools/package_release.sh
 tools/verify_release.sh
 ```
@@ -104,6 +114,8 @@ tools/verify_release.sh
 离线 cache 的 `catalog.sig` 使用现有 XPad2/BOOM RSA-4096 production identity；
 `tools/sign_catalog.sh` 只在发布机内存中恢复 PKCS12 密码和临时私钥，随后销毁临时目录。
 私钥、加密密码和恢复 RSA key 保持在受限本地目录与群晖冷备，绝不进入仓库或诊断包。
+发布 ZIP 同时包含各组件许可证、BoomInstaller 修改声明，以及从 `Cargo.lock` 对应 crate
+源码自动收集的 Rust 第三方许可证清单。
 
 精确架构、事务、状态和验收定义见 [DESIGN.md](DESIGN.md)。
 

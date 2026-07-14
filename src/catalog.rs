@@ -1,5 +1,5 @@
 use crate::embedded;
-use crate::error::{IoContext, Result, msg};
+use crate::error::{Error, IoContext, Result, msg};
 use crate::model::{Artifact, AssetsLock};
 use crate::util::{Paths, atomic_write, copy_atomic, sha256_file};
 use base64::Engine;
@@ -9,12 +9,14 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 const LOCK_JSON: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets.lock.json"));
 const PUBLIC_KEY: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/keys/catalog-release-public.pem"
 ));
+static STALE_MANAGED_CACHE_WARNED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone)]
 pub struct Catalog {
@@ -86,16 +88,27 @@ impl Catalog {
         let catalog_path = paths.cache.join("catalog.json");
         let sig_path = paths.cache.join("catalog.sig");
         if catalog_path.exists() || sig_path.exists() {
-            let external = verify_external_catalog(&paths.cache, self)?;
-            if let Some(entry) = external.artifacts.iter().find(|a| a.id == id) {
-                let blob = paths.cache.join("blobs").join(&entry.sha256);
-                if blob.exists() {
-                    verify_blob(&blob, entry)?;
-                    return Ok(ResolvedArtifact {
-                        artifact,
-                        source: ResolvedSource::Cache(blob),
-                    });
+            match verify_external_catalog(&paths.cache, self) {
+                Ok(external) => {
+                    if let Some(entry) = external.artifacts.iter().find(|a| a.id == id) {
+                        let blob = paths.cache.join("blobs").join(&entry.sha256);
+                        if blob.exists() {
+                            verify_blob(&blob, entry)?;
+                            return Ok(ResolvedArtifact {
+                                artifact,
+                                source: ResolvedSource::Cache(blob),
+                            });
+                        }
+                    }
                 }
+                Err(error) if may_ignore_managed_cache_error(&error, paths.cache_is_explicit) => {
+                    if !STALE_MANAGED_CACHE_WARNED.swap(true, Ordering::Relaxed) {
+                        eprintln!(
+                            "提示：默认缓存属于其他 xpad2 版本，已忽略并改用当前 ELF 的内嵌锁定制品；可执行 `xpad2 cache clear` 或导入同版本缓存。"
+                        );
+                    }
+                }
+                Err(error) => return Err(error),
             }
         }
         let embedded = embedded::get(id)
@@ -105,6 +118,10 @@ impl Catalog {
             source: ResolvedSource::Embedded(embedded.bytes),
         })
     }
+}
+
+fn may_ignore_managed_cache_error(error: &Error, cache_is_explicit: bool) -> bool {
+    !cache_is_explicit && matches!(error, Error::CatalogReleaseMismatch)
 }
 
 fn signature_bytes(raw: &[u8]) -> Result<Vec<u8>> {
@@ -165,9 +182,7 @@ pub fn verify_external_catalog(cache: &Path, baseline: &Catalog) -> Result<Asset
         || external.product_version != baseline.lock.product_version
         || external.catalog_version != baseline.lock.catalog_version
     {
-        return Err(msg(
-            "external catalog does not belong to this xpad2 release",
-        ));
+        return Err(Error::CatalogReleaseMismatch);
     }
     let expected: BTreeMap<_, _> = baseline
         .lock
@@ -311,5 +326,16 @@ mod tests {
     #[test]
     fn invalid_catalog_signature_is_rejected() {
         assert!(verify_catalog_signature(b"catalog", &[0u8; 512]).is_err());
+    }
+
+    #[test]
+    fn only_default_cache_may_fall_back_from_a_signed_other_release() {
+        let mismatch = Error::CatalogReleaseMismatch;
+        assert!(may_ignore_managed_cache_error(&mismatch, false));
+        assert!(!may_ignore_managed_cache_error(&mismatch, true));
+        assert!(!may_ignore_managed_cache_error(
+            &msg("bad signature"),
+            false
+        ));
     }
 }

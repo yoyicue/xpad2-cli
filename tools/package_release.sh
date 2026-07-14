@@ -32,10 +32,10 @@ source_for() {
     ionstack-perf-target) printf '%s\n' "$PARENT/xpad2-ionstack-poc/build/ionstack_perf_target" ;;
     ionstack-preload) printf '%s\n' "$PARENT/xpad2-ionstack-poc/build/ionstack_preload.so" ;;
     ionstack-chainwalk-probe) printf '%s\n' "$PARENT/xpad2-ionstack-poc/build/cve_2026_43499_chainwalk_probe_arm32" ;;
-    ksud) printf '%s\n' "$PARENT/xpad2_ksu_lateload/artifacts/ksud-xpad2" ;;
+    ksud) printf '%s\n' "$PARENT/xpad2-ksu-lateload/artifacts/ksud-xpad2" ;;
     ksu-manager) printf '%s\n' "$PARENT/xpad2-reroot-android/app/src/main/res/raw/kernelsu_manager_v3_2_4_32457.apk" ;;
     xpad-installer) printf '%s\n' "$PARENT/xpad-installer/dist/xpad-install" ;;
-    boominstaller) printf '%s\n' "$PARENT/BoomInstaller/out/apk/BoomInstaller-v13.6.0.r7.70badc2-production.apk" ;;
+    boominstaller) printf '%s\n' "$PARENT/BoomInstaller/out/apk/BoomInstaller-v13.6.0.r8.b5fc526-production.apk" ;;
     *) return 1 ;;
   esac
 }
@@ -55,9 +55,15 @@ cp "$ROOT/README.md" "$ROOT/DESIGN.md" "$ROOT/NOTICE.md" "$ROOT/LICENSE" \
 
 cp "$PARENT/xpad2-ionstack-poc/LICENSE" "$PACKAGE/licenses/xpad2-ionstack-poc-LICENSE"
 cp "$PARENT/xpad2-ionstack-poc/NOTICE" "$PACKAGE/licenses/xpad2-ionstack-poc-NOTICE"
-cp "$PARENT/xpad2_ksu_lateload/LICENSE" "$PACKAGE/licenses/KernelSU-LICENSE"
+cp "$PARENT/xpad2-ionstack-poc/licenses/Apache-2.0.txt" \
+  "$PACKAGE/licenses/xpad2-ionstack-poc-Apache-2.0-LICENSE"
+cp "$PARENT/xpad2-ksu-lateload/LICENSE" "$PACKAGE/licenses/KernelSU-userspace-GPL-3.0-LICENSE"
+cp "$PARENT/xpad2-ksu-lateload/kernel/LICENSE" "$PACKAGE/licenses/KernelSU-kernel-GPL-2.0-LICENSE"
 cp "$PARENT/xpad-installer/LICENSE" "$PACKAGE/licenses/xpad-installer-LICENSE"
 cp "$PARENT/BoomInstaller/LICENSE" "$PACKAGE/licenses/BoomInstaller-LICENSE"
+cp "$PARENT/BoomInstaller/NOTICE.md" "$PACKAGE/licenses/BoomInstaller-NOTICE.md"
+"$ROOT/tools/collect_rust_licenses.sh" "$PACKAGE/licenses" \
+  "$PACKAGE/licenses/BoomInstaller-LICENSE"
 
 cp "$ROOT/assets.lock.json" "$CACHE/catalog.json"
 while IFS=$'\t' read -r id filename expected_sha expected_size; do

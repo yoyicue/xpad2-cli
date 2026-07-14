@@ -16,6 +16,8 @@ pub enum Error {
     Json(#[from] serde_json::Error),
     #[error("ZIP: {0}")]
     Zip(#[from] zip::result::ZipError),
+    #[error("external catalog does not belong to this xpad2 release")]
+    CatalogReleaseMismatch,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

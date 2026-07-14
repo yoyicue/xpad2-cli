@@ -350,22 +350,44 @@ fn install_apk_with_xpad_install(
     log: &mut TransactionLog,
 ) -> Result<()> {
     let path_text = path.to_str().ok_or_else(|| msg("invalid APK path"))?;
+    let already_installed = device::installed_apk_identity(&identity.package)?.is_some();
+    let (verb, backend, action) = apk_install_plan(already_installed);
     println!(
-        "安装 {}：通常 30–90 秒；若 Android 报 process is bad，将停止并要求普通重启。",
-        identity.package
+        "{action} {}：后端={backend}，通常 10–90 秒；若 Android 报 process is bad，将停止并要求普通重启。",
+        identity.package,
     );
     log.event(
         "apk",
         "installing",
-        json!({"package": identity.package, "version_code": identity.version_code}),
+        json!({"package": identity.package, "version_code": identity.version_code, "operation": verb, "backend": backend}),
     )?;
-    let output = run(XPAD_INSTALL, &["install", "--backend", "auto", path_text])?;
+    let output = run(XPAD_INSTALL, &[verb, "--backend", backend, path_text])?;
     let text = output_text(&output);
-    log.command_result("xpad-install install", output.status.success(), &text)?;
+    let command_name = format!("xpad-install {verb} --backend {backend}");
+    log.command_result(&command_name, output.status.success(), &text)?;
     if !output.status.success() {
-        return Err(classify_installer_error("APK install", &text));
+        return Err(classify_installer_error(
+            if already_installed {
+                "APK upgrade"
+            } else {
+                "APK install"
+            },
+            &text,
+        ));
     }
     Ok(())
+}
+
+fn apk_install_plan(already_installed: bool) -> (&'static str, &'static str, &'static str) {
+    if already_installed {
+        // The OEM provider is reliable for first install but can accept an
+        // update request without ever applying it. UID 1000 PackageInstaller
+        // is the deterministic, independently verified same-signature update
+        // path on /260.
+        ("upgrade", "direct", "升级")
+    } else {
+        ("install", "auto", "安装")
+    }
 }
 
 fn verify_installed(artifact: &Artifact, expected: &ApkIdentity) -> Result<()> {
@@ -452,4 +474,15 @@ pub fn cleanup_work(paths: &Paths) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::apk_install_plan;
+
+    #[test]
+    fn apk_updates_use_the_deterministic_direct_backend() {
+        assert_eq!(apk_install_plan(false), ("install", "auto", "安装"));
+        assert_eq!(apk_install_plan(true), ("upgrade", "direct", "升级"));
+    }
 }

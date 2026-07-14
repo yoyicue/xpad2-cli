@@ -1,6 +1,7 @@
 # XPad2 CLI 设计
 
-状态：v0.1.0 已实现并完成 `/260` 真机端到端验收（2026-07-15）。
+状态：v0.1.1 已实现；v0.1.0 已完成 `/260` 真机端到端验收，v0.1.1 更新规范化的
+BoomInstaller 依赖身份和公开分发材料（2026-07-15）。
 
 验收覆盖单 ELF、只读状态探针、3-worker IonStack 临时 Root、KernelSU late-load、
 CLI/APK 身份验证、临时 Root 安全收口、同 boot 幂等重跑、普通重启后恢复、RSA 签名
@@ -81,7 +82,7 @@ APK 安装复用 `xpad-install` 的现有身份通道选择：
 ```text
 组件源码仓库
 |-- xpad2-ionstack-poc
-|-- xpad2_ksu_lateload
+|-- xpad2-ksu-lateload
 |-- xpad-installer
 |-- KernelSU Manager
 `-- BoomInstaller
@@ -360,6 +361,9 @@ xpad2 logs export DIRECTORY
 
 - 通过 PackageManager 独立读取实际包名、versionCode、签名和 installer attribution。
 - BoomInstaller 还必须验证激活后的 system 服务和自启动配置。
+- 首次安装走 OEM auto provider；同包同证书升级走 UID 1000 Direct PackageInstaller。
+  `/260` 的 OEM provider 对首次安装可靠，但可能接收更新请求后不实际提交；升级不能
+  在该路径等待到超时。
 
 ## 8. 本地目录缓存
 
@@ -430,6 +434,10 @@ xpad2-cache/
 5. 全部缺失时明确失败；第一版不联网下载。
 
 命中缓存不代表可信。每次使用前仍需校验 catalog、签名、大小和 SHA-256。
+
+默认托管缓存位于固定状态目录，跨 `xpad2` 版本升级时可能保留旧 catalog。若旧 catalog
+签名有效但 release 身份不同，安装解析明确告警并回退到当前 ELF 的内嵌制品；签名损坏、
+内容损坏，以及通过 `--cache-dir`/`XPAD2_CACHE_DIR` 显式选择的任何不匹配缓存仍然硬失败。
 
 ### 8.3 缓存安全和生命周期
 
@@ -525,7 +533,7 @@ xpad2log-YYYYMMDD-HHMMSS.zip
 | `ksud-xpad2` | KernelSU 32547 / UAPI 2 | `8e6fed9f063b9b998f5b0cec8b64f31ad1eea885c528b9e9883ff3f4cd108e06` |
 | KernelSU Manager | v3.2.4 / 32457 | `f0951351291494e0c309267b375cf5bfbdb5eca6df0ec18f6fb7df8b3dea990b` |
 | `xpad-install` | v0.1.1 | `a0b638402abf0e567d8927ac1a865b1eefaff710bc4f32273bd5c49ce55fcf75` |
-| BoomInstaller | v13.6.0.r7.70badc2 production | `77d1bf453bbf37638a61e8043d1c5c23c94132f8956050f43f2865902a678e36` |
+| BoomInstaller | v13.6.0.r8.b5fc526 production | `ad4980f9341b0d448f0f149d63653cde9a437caf6d4e811beb729b5c246078b0` |
 
 版本号相等不是 KSU/Manager 兼容性的判据；兼容组合由 catalog 显式锁定。
 

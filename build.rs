@@ -34,7 +34,7 @@ fn candidate_paths(manifest: &Path, artifact_dir: Option<&Path>, a: &Artifact) -
         "ionstack-chainwalk-probe" => {
             Some(parent.join("xpad2-ionstack-poc/build/cve_2026_43499_chainwalk_probe_arm32"))
         }
-        "ksud" => Some(parent.join("xpad2_ksu_lateload/artifacts/ksud-xpad2")),
+        "ksud" => Some(parent.join("xpad2-ksu-lateload/artifacts/ksud-xpad2")),
         "ksu-manager" => {
             Some(parent.join(
                 "xpad2-reroot-android/app/src/main/res/raw/kernelsu_manager_v3_2_4_32457.apk",
@@ -42,7 +42,7 @@ fn candidate_paths(manifest: &Path, artifact_dir: Option<&Path>, a: &Artifact) -
         }
         "xpad-installer" => Some(parent.join("xpad-installer/dist/xpad-install")),
         "boominstaller" => Some(
-            parent.join("BoomInstaller/out/apk/BoomInstaller-v13.6.0.r7.70badc2-production.apk"),
+            parent.join("BoomInstaller/out/apk/BoomInstaller-v13.6.0.r8.b5fc526-production.apk"),
         ),
         _ => None,
     };

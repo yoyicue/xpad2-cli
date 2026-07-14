@@ -4,11 +4,7 @@ set -euo pipefail
 umask 077
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-BACKUP=${XPAD2_RELEASE_SIGNING_BACKUP:-/Volumes/home/projects/xpad2-reroot-android/signing-backup}
-KEYSTORE="$BACKUP/xpad2-boom-release.p12"
-SECRET_FILE="$BACKUP/xpad2-boom-release-password.rsa-oaep-sha256"
-RECOVERY_KEY="$BACKUP/recovery-rsa/id_rsa"
-CERT="$BACKUP/xpad2-boom-release-cert.pem"
+BACKUP=${XPAD2_RELEASE_SIGNING_BACKUP:-}
 PUBLIC_KEY="$ROOT/keys/catalog-release-public.pem"
 EXPECTED_CERT_SHA256=3cb5b69579d23197ced8100818a85a46b821383a504b394a44cfe3e98ade78a2
 EXPECTED_RECOVERY_FINGERPRINT=SHA256:cOVa4bIB0vgNbqR5Vi95Q0QFDLY7lJX79sHEHTm1Q2U
@@ -17,6 +13,12 @@ die() {
   printf 'XPAD2_CATALOG_SIGN_REFUSED reason=%s\n' "$1" >&2
   exit 1
 }
+
+[[ -n "$BACKUP" ]] || die signing-backup-not-set
+KEYSTORE="$BACKUP/xpad2-boom-release.p12"
+SECRET_FILE="$BACKUP/xpad2-boom-release-password.rsa-oaep-sha256"
+RECOVERY_KEY="$BACKUP/recovery-rsa/id_rsa"
+CERT="$BACKUP/xpad2-boom-release-cert.pem"
 
 (($# == 2)) || die usage-input-catalog-output-signature
 INPUT=$1
@@ -77,4 +79,3 @@ unset XPAD2_SIGNING_PASSWORD
 printf 'XPAD2_CATALOG_SIGN_OK catalog_sha256=%s signature_sha256=%s\n' \
   "$(shasum -a 256 "$INPUT" | awk '{print $1}')" \
   "$(shasum -a 256 "$OUTPUT" | awk '{print $1}')"
-

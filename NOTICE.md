@@ -8,12 +8,12 @@ separate processes/files at runtime. Their exact binary and source identities ar
 
 - `xpad2-ionstack-poc`: GPL-3.0-or-later aggregate with Apache-2.0-derived exploit portions;
   its upstream LICENSE and NOTICE are included in release packages.
-- KernelSU late-load kernel/userspace artifacts: GPL-2.0-only and applicable upstream notices.
-- KernelSU Manager: GPL-3.0-only.
-- `xpad-installer`: its upstream LICENSE is included in release packages.
-- BoomInstaller: its upstream LICENSE and third-party notices remain with that project and the
-  signed APK; the project LICENSE is included in release packages.
-- Rust dependencies retain their own licenses as recorded by `Cargo.lock` and crates.io metadata.
+- KernelSU late-load kernel module: GPL-2.0-only; `ksud-xpad2` and KernelSU Manager:
+  GPL-3.0-only. Both license texts are included separately.
+- `xpad-installer`: GPL-3.0-only; its upstream LICENSE is included.
+- BoomInstaller: Apache-2.0; its LICENSE and fork attribution/modification notice are included.
+- Rust dependencies retain their own licenses. The release package contains an inventory and
+  the license files collected from the exact crate sources selected by `Cargo.lock`.
 
 No production signing private key, encrypted password, recovery private key, GitHub credential,
 ADB key, or pairing credential is included in this repository or any diagnostic package.

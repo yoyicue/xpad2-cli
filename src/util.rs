@@ -15,6 +15,7 @@ pub const DEFAULT_ROOT: &str = "/data/local/tmp/.xpad2";
 pub struct Paths {
     pub root: PathBuf,
     pub cache: PathBuf,
+    pub cache_is_explicit: bool,
     pub work: PathBuf,
     pub state: PathBuf,
     pub logs: PathBuf,
@@ -26,10 +27,12 @@ impl Paths {
         let cache_override = cache_override
             .map(Path::to_path_buf)
             .or_else(|| std::env::var_os("XPAD2_CACHE_DIR").map(PathBuf::from));
+        let cache_is_explicit = cache_override.is_some();
         let state_root = PathBuf::from(DEFAULT_ROOT);
         let cache = cache_override.unwrap_or_else(|| state_root.join("cache"));
         Self {
             cache,
+            cache_is_explicit,
             work: state_root.join("work"),
             state: state_root.join("state"),
             logs: state_root.join("logs"),

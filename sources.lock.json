@@ -1,18 +1,27 @@
 {
   "schema": 1,
-  "product_version": "0.1.0",
+  "product_version": "0.1.1",
   "sources": [
     {
       "component": "ionstack",
       "repository": "https://github.com/yoyicue/xpad2-ionstack-poc",
       "commit": "acb75f8db368278ae258aef2213c5f869c5ddb27",
-      "license": "see-upstream"
+      "license": "GPL-3.0-or-later AND Apache-2.0"
     },
     {
-      "component": "ksu-lateload",
-      "repository": "https://github.com/yoyicue/xpad2_ksu_lateload",
+      "component": "ksud-xpad2",
+      "repository": "https://github.com/yoyicue/xpad2-ksu-lateload",
       "commit": "c3099636eb863ac9d476a40c0a582bc876415d8a",
       "tag": "v0.2.0",
+      "artifact": "ksud-xpad2",
+      "license": "GPL-3.0-only"
+    },
+    {
+      "component": "ksu-module",
+      "repository": "https://github.com/yoyicue/xpad2-ksu-lateload",
+      "commit": "c3099636eb863ac9d476a40c0a582bc876415d8a",
+      "tag": "v0.2.0",
+      "artifact": "kernelsu-xpad2-4.19.191.ko",
       "license": "GPL-2.0-only"
     },
     {
@@ -20,7 +29,7 @@
       "repository": "https://github.com/yoyicue/xpad-installer",
       "commit": "679e274ab20c8c8d95679576cb99955ab3b21fc6",
       "tag": "v0.1.1",
-      "license": "see-upstream"
+      "license": "GPL-3.0-only"
     },
     {
       "component": "kernelsu-manager",
@@ -32,9 +41,9 @@
     {
       "component": "boominstaller",
       "repository": "https://github.com/yoyicue/BoomInstaller",
-      "commit": "70badc2d8d3f7449b5a679c9f2d37ab22ee83f2e",
-      "tag": "v13.6.0.r7.70badc2",
-      "license": "see-upstream"
+      "commit": "b5fc526b0fefc44e0e5164d665f9429dd6cc46c6",
+      "tag": "v13.6.0.r8.b5fc526",
+      "license": "Apache-2.0"
     }
   ]
 }

@@ -440,6 +440,7 @@ mod tests {
         let paths = Paths {
             root: root.clone(),
             cache: root.join("cache"),
+            cache_is_explicit: false,
             work: root.join("work"),
             state: root.join("state"),
             logs: root.join("logs"),
