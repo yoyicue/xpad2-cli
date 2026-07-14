@@ -41,8 +41,8 @@
     {
       "component": "boominstaller",
       "repository": "https://github.com/yoyicue/BoomInstaller",
-      "commit": "b5fc526b0fefc44e0e5164d665f9429dd6cc46c6",
-      "tag": "v13.6.0.r8.b5fc526",
+      "commit": "2f1ac6ff24b8549b30495a00ad759abc302cd282",
+      "tag": "v13.6.0.r9.2f1ac6f",
       "license": "Apache-2.0"
     }
   ]

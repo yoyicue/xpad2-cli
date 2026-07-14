@@ -308,22 +308,35 @@ fn global_setting(name: &str) -> Option<String> {
 pub fn installed_apk_identity(
     package: &str,
 ) -> crate::error::Result<Option<crate::model::ApkIdentity>> {
+    let Some(path) = installed_apk_path(package)? else {
+        return Ok(None);
+    };
+    Ok(Some(apk::inspect(&path)?))
+}
+
+pub fn installed_apk_path(package: &str) -> crate::error::Result<Option<PathBuf>> {
     let output =
         run("/system/bin/pm", &["path", package]).or_else(|_| run("pm", &["path", package]))?;
     if !output.status.success() {
         return Ok(None);
     }
     let text = output_text(&output);
-    let Some(path) = text
+    let paths: Vec<_> = text
         .lines()
-        .find_map(|line| line.trim().strip_prefix("package:"))
+        .filter_map(|line| line.trim().strip_prefix("package:"))
         .map(PathBuf::from)
+        .collect();
+    let Some(path) = paths
+        .iter()
+        .find(|path| path.file_name().is_some_and(|name| name == "base.apk"))
+        .or_else(|| paths.first())
+        .cloned()
     else {
         return Err(crate::error::msg(
             "PackageManager returned no base APK path",
         ));
     };
-    Ok(Some(apk::inspect(&path)?))
+    Ok(Some(path))
 }
 
 pub fn snapshot(catalog: &Catalog, paths: &Paths) -> DeviceStatus {

@@ -364,6 +364,8 @@ xpad2 logs export DIRECTORY
 - 首次安装走 OEM auto provider；同包同证书升级走 UID 1000 Direct PackageInstaller。
   `/260` 的 OEM provider 对首次安装可靠，但可能接收更新请求后不实际提交；升级不能
   在该路径等待到超时。
+- BoomInstaller 激活从已验证安装目录读取 `base.apk` 和 `lib/arm64/libshizuku.so`；
+  不放宽 xpad2 的 0700 私有工作目录，也不要求 UID 1000 穿透 shell 私有目录。
 
 ## 8. 本地目录缓存
 
@@ -533,7 +535,7 @@ xpad2log-YYYYMMDD-HHMMSS.zip
 | `ksud-xpad2` | KernelSU 32547 / UAPI 2 | `8e6fed9f063b9b998f5b0cec8b64f31ad1eea885c528b9e9883ff3f4cd108e06` |
 | KernelSU Manager | v3.2.4 / 32457 | `f0951351291494e0c309267b375cf5bfbdb5eca6df0ec18f6fb7df8b3dea990b` |
 | `xpad-install` | v0.1.1 | `a0b638402abf0e567d8927ac1a865b1eefaff710bc4f32273bd5c49ce55fcf75` |
-| BoomInstaller | v13.6.0.r8.b5fc526 production | `ad4980f9341b0d448f0f149d63653cde9a437caf6d4e811beb729b5c246078b0` |
+| BoomInstaller | v13.6.0.r9.2f1ac6f production | `308cd48362d57b34344f7b52b3219ce99aa585d112479dc1d9564127f06fa1d6` |
 
 版本号相等不是 KSU/Manager 兼容性的判据；兼容组合由 catalog 显式锁定。
 

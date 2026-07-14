@@ -10,12 +10,10 @@ use crate::util::{
     shell_quote, validate_elf_arm64,
 };
 use serde_json::json;
-use std::fs::{self, File};
-use std::io::Read;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant};
-use zip::ZipArchive;
 
 const XPAD_INSTALL: &str = "/data/local/tmp/xpad-install";
 
@@ -241,7 +239,7 @@ pub fn install_locked_apk(
         verify_installed(artifact, &identity)?;
     }
     if id == "boominstaller" {
-        activate_boom(&staged, paths, log)?;
+        activate_boom(&identity, log)?;
         changed = true;
         let final_state = device::apk_status(artifact);
         if final_state.state != ComponentState::Active {
@@ -413,9 +411,20 @@ fn verify_installed(artifact: &Artifact, expected: &ApkIdentity) -> Result<()> {
     Ok(())
 }
 
-fn activate_boom(apk_path: &Path, paths: &Paths, log: &mut TransactionLog) -> Result<()> {
-    let starter = paths.work.join("boominstaller-starter");
-    extract_zip_member(apk_path, "lib/arm64-v8a/libshizuku.so", &starter, 0o700)?;
+fn activate_boom(identity: &ApkIdentity, log: &mut TransactionLog) -> Result<()> {
+    let apk_path = device::installed_apk_path(&identity.package)?.ok_or_else(|| {
+        msg(format!(
+            "PackageManager cannot find {} before activation",
+            identity.package
+        ))
+    })?;
+    let starter = boom_starter_path(&apk_path)?;
+    if !starter.is_file() {
+        return Err(msg(format!(
+            "installed BoomInstaller starter is missing: {}",
+            starter.display()
+        )));
+    }
     let starter_text = starter
         .to_str()
         .ok_or_else(|| msg("invalid Boom starter path"))?;
@@ -424,7 +433,11 @@ fn activate_boom(apk_path: &Path, paths: &Paths, log: &mut TransactionLog) -> Re
         .ok_or_else(|| msg("invalid Boom APK path"))?;
     let starter_arg = format!("--starter={starter_text}");
     let apk_arg = format!("--apk={apk_text}");
-    log.event("boominstaller", "activating", json!({"autostart": true}))?;
+    log.event(
+        "boominstaller",
+        "activating",
+        json!({"autostart": true, "apk": apk_path, "starter": starter}),
+    )?;
     println!("激活 BoomInstaller 并配置普通开机自启动，预计约 20–60 秒…");
     let output = run(XPAD_INSTALL, &["activate", &starter_arg, &apk_arg])?;
     let text = output_text(&output);
@@ -435,15 +448,11 @@ fn activate_boom(apk_path: &Path, paths: &Paths, log: &mut TransactionLog) -> Re
     Ok(())
 }
 
-fn extract_zip_member(apk: &Path, member: &str, target: &Path, mode: u32) -> Result<()> {
-    let file = File::open(apk).at(apk)?;
-    let mut zip = ZipArchive::new(file)?;
-    let mut entry = zip
-        .by_name(member)
-        .map_err(|_| msg(format!("APK lacks required {member}")))?;
-    let mut bytes = Vec::new();
-    entry.read_to_end(&mut bytes).at(apk)?;
-    atomic_write(target, &bytes, mode)
+fn boom_starter_path(apk: &Path) -> Result<PathBuf> {
+    let base = apk
+        .parent()
+        .ok_or_else(|| msg("installed BoomInstaller APK has no parent directory"))?;
+    Ok(base.join("lib/arm64/libshizuku.so"))
 }
 
 fn classify_installer_error(context: &str, text: &str) -> crate::error::Error {
@@ -478,11 +487,21 @@ pub fn cleanup_work(paths: &Paths) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::apk_install_plan;
+    use super::{apk_install_plan, boom_starter_path};
+    use std::path::Path;
 
     #[test]
     fn apk_updates_use_the_deterministic_direct_backend() {
         assert_eq!(apk_install_plan(false), ("install", "auto", "安装"));
         assert_eq!(apk_install_plan(true), ("upgrade", "direct", "升级"));
+    }
+
+    #[test]
+    fn boom_activation_uses_the_verified_installed_native_library() {
+        let apk = Path::new("/data/app/example/base.apk");
+        assert_eq!(
+            boom_starter_path(apk).expect("derive starter"),
+            Path::new("/data/app/example/lib/arm64/libshizuku.so")
+        );
     }
 }

@@ -19,7 +19,7 @@ adb -s SERIAL shell /data/local/tmp/xpad2 install full
 - KernelSU 32547 / UAPI 2 以 late-load 方式在当前 boot 激活；
 - KernelSU Manager v3.2.4（versionCode 32457）；
 - `/data/local/tmp/xpad-install` v0.1.1 锁定构建；
-- BoomInstaller v13.6.0.r8.b5fc526、system 服务与普通开机自启动。
+- BoomInstaller v13.6.0.r9.2f1ac6f、system 服务与普通开机自启动。
 
 再次执行同一命令是幂等的：已经通过包名、版本、证书、哈希和运行时探针验证的项目
 会跳过。普通重启后 APK 和 CLI 保留，只恢复 KSU。
@@ -62,7 +62,8 @@ xpad2 cache path|list|verify|import DIRECTORY|prune|clear
 预检查条件。APK 会先解析并验证真实 manifest、ABI、v2/v3 签名和内容摘要；签名冲突
 时不会自动卸载应用或清除用户数据。首次安装使用 OEM auto 通道；检测到同包已安装且
 证书兼容时，升级使用 UID 1000 Direct PackageInstaller 通道，避免 OEM Provider 接收
-更新请求后不落盘而一直等待。
+更新请求后不落盘而一直等待。BoomInstaller 激活使用已经过独立身份验证的已安装
+`base.apk` 与原生 starter，不把 shell 私有工作目录中的临时文件交给 UID 1000 执行。
 
 名称边界保持固定：`BoomInstaller` 是
 [`yoyicue/BoomInstaller`](https://github.com/yoyicue/BoomInstaller) 产生的 Android

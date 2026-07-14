@@ -178,7 +178,7 @@ mod tests {
             (
                 "boominstaller",
                 "com.yoyicue.boominstaller",
-                8,
+                9,
                 "3cb5b69579d23197ced8100818a85a46b821383a504b394a44cfe3e98ade78a2",
             ),
         ] {
