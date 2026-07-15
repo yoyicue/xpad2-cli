@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "product_version": "0.2.3",
-  "catalog_version": "2026-07-15.12",
+  "product_version": "0.3.0",
+  "catalog_version": "2026-07-15.14",
   "profile": {
     "build_fingerprint": "alps/vnd_ls12_mt8797_wifi_64/ls12_mt8797_wifi_64:13/TP1A.220624.014/260:user/release-keys",
     "kernel_release_prefix": "4.19.191",
@@ -110,9 +110,9 @@
       "id": "xpad-installer",
       "filename": "xpad-install",
       "kind": "cli",
-      "version": "0.1.1",
-      "size": 54680,
-      "sha256": "a0b638402abf0e567d8927ac1a865b1eefaff710bc4f32273bd5c49ce55fcf75",
+      "version": "0.2.1",
+      "size": 74600,
+      "sha256": "60505b4b303422f1f3d664b6e1921f5cb59c5c31314e9bdb27cb17b2aa78b980",
       "embedded": true,
       "mode": 448,
       "target": "/data/local/tmp/xpad-install",

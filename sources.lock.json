@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "product_version": "0.2.3",
+  "product_version": "0.3.0",
   "sources": [
     {
       "component": "ionstack",
@@ -28,8 +28,8 @@
     {
       "component": "xpad-installer",
       "repository": "https://github.com/yoyicue/xpad-installer",
-      "commit": "679e274ab20c8c8d95679576cb99955ab3b21fc6",
-      "tag": "v0.1.1",
+      "commit": "77239bb0763be8f9bfcb2a0fad0ddc0d6d6e222e",
+      "tag": "v0.2.1",
       "license": "GPL-3.0-only"
     },
     {

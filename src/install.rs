@@ -30,6 +30,9 @@ pub fn install_locked_cli(
         .ok_or_else(|| msg(format!("locked CLI {id} has no target")))?;
     let state = device::cli_status(artifact);
     if state.state == ComponentState::Installed {
+        if id == "xpad-installer" {
+            ensure_installer_backup(log)?;
+        }
         log.event(
             "component",
             "skipped",
@@ -62,10 +65,41 @@ pub fn install_locked_cli(
                 &output_text(&output),
             ));
         }
+        ensure_installer_backup(log)?;
     }
     log.event("component", "installed", json!({"id": id, "target": target, "sha256": actual, "source": resolved.source_description()}))?;
     println!("✓ {id}: 已安装并验证");
     Ok(true)
+}
+
+pub fn ensure_installer_backup(log: &mut TransactionLog) -> Result<bool> {
+    if !Path::new(XPAD_INSTALL).is_file() {
+        return Err(msg(
+            "xpad-install is not installed; cannot maintain installer-backup",
+        ));
+    }
+    println!("检查 0044 备用安装身份（健康时不创建事务）…");
+    let output = run(XPAD_INSTALL, &["znxrun", "ensure"])?;
+    let text = output_text(&output);
+    log.command_result("xpad-install znxrun ensure", output.status.success(), &text)?;
+    if !output.status.success() {
+        return Err(classify_installer_error("installer-backup repair", &text));
+    }
+    let state = device::installer_backup_status();
+    if state.state != ComponentState::Active {
+        return Err(msg(format!(
+            "installer-backup final verification failed: {}",
+            state.detail.unwrap_or_default()
+        )));
+    }
+    let changed = text.contains("ZNXRUN_ENSURE result=repaired");
+    log.event(
+        "component",
+        if changed { "repaired" } else { "verified" },
+        json!({"id": "installer-backup", "transport": "0044", "uid": 10072}),
+    )?;
+    println!("✓ installer-backup: 正式 anchor 与 UID 10072 已验证");
+    Ok(changed)
 }
 
 pub fn install_arbitrary_cli(
@@ -378,11 +412,11 @@ fn install_apk_with_xpad_install(
 
 fn apk_install_plan(already_installed: bool) -> (&'static str, &'static str, &'static str) {
     if already_installed {
-        // The OEM provider is reliable for first install but can accept an
-        // update request without ever applying it. UID 1000 PackageInstaller
-        // is the deterministic, independently verified same-signature update
-        // path on /260.
-        ("upgrade", "direct", "升级")
+        // Keep the persistent UID 10072/0044 identity ahead of temporary root
+        // and UID 1000/31317. xpad-install's auto path detects a provider that
+        // did not commit, falls back within the selected identity, and repairs
+        // 0044 after any lower-priority transport.
+        ("upgrade", "auto", "升级")
     } else {
         ("install", "auto", "安装")
     }
@@ -491,9 +525,9 @@ mod tests {
     use std::path::Path;
 
     #[test]
-    fn apk_updates_use_the_deterministic_direct_backend() {
+    fn apk_installs_and_updates_prioritize_the_managed_0044_identity() {
         assert_eq!(apk_install_plan(false), ("install", "auto", "安装"));
-        assert_eq!(apk_install_plan(true), ("upgrade", "direct", "升级"));
+        assert_eq!(apk_install_plan(true), ("upgrade", "auto", "升级"));
     }
 
     #[test]

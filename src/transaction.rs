@@ -10,7 +10,13 @@ use crate::util::{OperationLock, Paths, boot_id, selinux};
 use serde_json::json;
 use std::collections::BTreeSet;
 
-const FULL: &[&str] = &["ksu", "xpad-installer", "ksu-manager", "boominstaller"];
+const FULL: &[&str] = &[
+    "ksu",
+    "xpad-installer",
+    "installer-backup",
+    "ksu-manager",
+    "boominstaller",
+];
 
 pub fn install_components(catalog: &Catalog, paths: &Paths, requested: &[String]) -> Result<()> {
     let components = normalize(requested)?;
@@ -26,6 +32,7 @@ pub fn install_components(catalog: &Catalog, paths: &Paths, requested: &[String]
         json!({"boot_id": started_boot, "selinux": started_selinux, "components": components}),
     )?;
     let mut root_session: Option<RootSession> = None;
+    let mut package_manager_changed = false;
 
     let mut result = (|| {
         device::profile_check(catalog)?;
@@ -50,14 +57,26 @@ pub fn install_components(catalog: &Catalog, paths: &Paths, requested: &[String]
                 &mut log,
             )?;
         }
-        if components.iter().any(|id| id == "xpad-installer") {
+        if components
+            .iter()
+            .any(|id| id == "xpad-installer" || id == "installer-backup")
+        {
             install::install_locked_cli(catalog, paths, "xpad-installer", &mut log)?;
         }
         if components.iter().any(|id| id == "ksu-manager") {
-            install::install_locked_apk(catalog, paths, "ksu-manager", &mut log)?;
+            package_manager_changed |=
+                install::install_locked_apk(catalog, paths, "ksu-manager", &mut log)?;
         }
         if components.iter().any(|id| id == "boominstaller") {
-            install::install_locked_apk(catalog, paths, "boominstaller", &mut log)?;
+            package_manager_changed |=
+                install::install_locked_apk(catalog, paths, "boominstaller", &mut log)?;
+        }
+        if package_manager_changed {
+            // PackageManager regenerates packages.list after APK commits. The
+            // anchor should make that rewrite persistent by itself; this final
+            // idempotent pass also repairs and verifies the fallback after all
+            // requested APK transactions have completed.
+            install::ensure_installer_backup(&mut log)?;
         }
         Ok(())
     })();
@@ -93,11 +112,30 @@ pub fn install_components(catalog: &Catalog, paths: &Paths, requested: &[String]
             }
         }
     }
-    if result.is_ok() && components.iter().any(|id| id == "xpad-installer") {
+    if result.is_ok()
+        && (package_manager_changed
+            || components
+                .iter()
+                .any(|id| id == "xpad-installer" || id == "installer-backup"))
+    {
         let state = device::cli_status(catalog.artifact("xpad-installer")?);
         if state.state != ComponentState::Installed {
             result = Err(msg(format!(
                 "final xpad-installer verification failed: {}",
+                state.detail.unwrap_or_default()
+            )));
+        }
+    }
+    if result.is_ok()
+        && (package_manager_changed
+            || components
+                .iter()
+                .any(|id| id == "xpad-installer" || id == "installer-backup"))
+    {
+        let state = device::installer_backup_status();
+        if state.state != ComponentState::Active {
+            result = Err(msg(format!(
+                "final installer-backup verification failed: {}",
                 state.detail.unwrap_or_default()
             )));
         }
@@ -183,4 +221,32 @@ fn normalize(requested: &[String]) -> Result<Vec<String>> {
         }
     }
     Ok(ordered)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn full_includes_managed_installer_backup_after_cli() {
+        let components = normalize(&["full".to_string()]).expect("normalize full");
+        assert_eq!(components, FULL);
+        let cli = components
+            .iter()
+            .position(|id| id == "xpad-installer")
+            .expect("xpad-installer");
+        let backup = components
+            .iter()
+            .position(|id| id == "installer-backup")
+            .expect("installer-backup");
+        assert_eq!(backup, cli + 1);
+    }
+
+    #[test]
+    fn installer_backup_is_a_valid_standalone_component() {
+        assert_eq!(
+            normalize(&["installer-backup".to_string()]).expect("normalize backup"),
+            vec!["installer-backup"]
+        );
+    }
 }

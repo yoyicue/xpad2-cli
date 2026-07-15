@@ -29,7 +29,9 @@ adb -s SERIAL shell /data/local/tmp/xpad2 update
 - `/260` 固件的系统 OTA 主包已对 user 0 冻结；
 - KernelSU 32547 / UAPI 2 以 late-load 方式在当前 boot 激活；
 - KernelSU Manager v3.2.5-22-gccfee6dc（versionCode 32547）；
-- `/data/local/tmp/xpad-install` v0.1.1 锁定构建；
+- `/data/local/tmp/xpad-install` v0.2.1 锁定构建；
+- `installer-backup`：正式签名的无代码/无权限 anchor 持久保存 0044 attribution，
+  `run-as znxrun` 独立验证为 UID 10072；
 - BoomInstaller v13.6.0.r11.29ec1f4：保留标准 Shizuku API、客户端发现和授权协议，
   Root 主服务通过隔离的 UID 1000 broker 安装 APK，并在普通开机时优先恢复 Root、
   失败时回退到已配对的本地 ADB。首次升级会清除旧客户端授权并要求重新确认。
@@ -72,7 +74,7 @@ xpad2 update --offline DIRECTORY_OR_ZIP
 xpad2 root [-- COMMAND ARG...]
 xpad2 freeze ota
 xpad2 unfreeze ota
-xpad2 install ksu|ksu-manager|xpad-installer|boominstaller|full ...
+xpad2 install ksu|ksu-manager|xpad-installer|installer-backup|boominstaller|full ...
 xpad2 install cli FILE [--name NAME]
 xpad2 install apk FILE
 xpad2 verify [COMPONENT]
@@ -84,10 +86,19 @@ xpad2 cache path|list|verify|import DIRECTORY|prune|clear
 
 安装普通 APK 不会把临时 Root、simpleperf 授权或 KernelSU Manager 是否存在作为
 预检查条件。APK 会先解析并验证真实 manifest、ABI、v2/v3 签名和内容摘要；签名冲突
-时不会自动卸载应用或清除用户数据。首次安装使用 OEM auto 通道；检测到同包已安装且
-证书兼容时，升级使用 UID 1000 Direct PackageInstaller 通道，避免 OEM Provider 接收
-更新请求后不落盘而一直等待。BoomInstaller 激活使用已经过独立身份验证的已安装
-`base.apk` 与原生 starter，不把 shell 私有工作目录中的临时文件交给 UID 1000 执行。
+时不会自动卸载应用或清除用户数据。首次安装和同包升级都使用 auto：先在持久 0044
+身份中尝试 OEM Provider，未提交时再尝试当前身份的 direct；0044 整体失败后才会降级，
+31317 始终是最后兜底，且成功后必须补回并复验 0044。BoomInstaller 激活使用已经过
+独立身份验证的已安装 `base.apk` 与原生 starter，不把 shell 私有工作目录中的临时文件
+交给 UID 1000 执行。
+
+`installer-backup` 是备用安装路径，不是 Android 用户或常驻进程。xpad2 把它作为一等
+状态展示：正式 anchor 的 PackageManager attribution 和 `run-as` UID 必须同时正确才算
+`active`。安装 `xpad-installer` 时会幂等执行 `znxrun ensure`；健康时不创建事务，丢失或
+仍依赖旧 carrier 时自动修复。任何由 xpad2 实际提交的 APK 安装/升级完成后还会再次
+幂等执行 `ensure` 和独立状态验证，覆盖 PackageManager 重写 `packages.list` 的边界。
+实现不直接编辑 `packages.list`，临时 OEM 白名单在成功、失败及可处理中断后均由监督
+进程恢复。
 
 名称边界保持固定：`BoomInstaller` 是
 [`yoyicue/BoomInstaller`](https://github.com/yoyicue/BoomInstaller) 产生的 Android

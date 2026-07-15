@@ -169,6 +169,59 @@ pub fn cli_status(artifact: &Artifact) -> ComponentStatus {
     }
 }
 
+pub fn installer_backup_status() -> ComponentStatus {
+    let target = Path::new("/data/local/tmp/xpad-install");
+    if !target.is_file() {
+        return status(
+            "installer-backup",
+            ComponentState::Absent,
+            Some("xpad-install is not installed"),
+        );
+    }
+    match run(
+        target.to_str().unwrap_or("/data/local/tmp/xpad-install"),
+        &["znxrun", "status"],
+    ) {
+        Ok(output) => parse_installer_backup_status(output.status.success(), &output_text(&output)),
+        Err(error) => status(
+            "installer-backup",
+            ComponentState::Broken,
+            Some(&format!("status command failed: {error}")),
+        ),
+    }
+}
+
+fn parse_installer_backup_status(success: bool, text: &str) -> ComponentStatus {
+    let detail = text.trim();
+    if success && text.contains("status=healthy") {
+        status("installer-backup", ComponentState::Active, Some(detail))
+    } else if text.contains("status=legacy") {
+        status(
+            "installer-backup",
+            ComponentState::Broken,
+            Some("legacy alias is active but managed anchor repair is required"),
+        )
+    } else if text.contains("status=invalid") {
+        status(
+            "installer-backup",
+            ComponentState::Incompatible,
+            Some("znxrun exists with an unexpected identity"),
+        )
+    } else if text.contains("status=missing") {
+        status(
+            "installer-backup",
+            ComponentState::Absent,
+            Some("managed 0044 alias is missing; repair is available"),
+        )
+    } else {
+        status(
+            "installer-backup",
+            ComponentState::Broken,
+            Some(&format!("unrecognized status: {detail}")),
+        )
+    }
+}
+
 pub fn apk_status(artifact: &Artifact) -> ComponentStatus {
     let package = artifact.package.as_deref().unwrap_or("");
     let identity = match installed_apk_identity(package) {
@@ -354,6 +407,7 @@ pub fn snapshot(catalog: &Catalog, paths: &Paths) -> DeviceStatus {
     if let Ok(artifact) = catalog.artifact("xpad-installer") {
         components.push(cli_status(artifact));
     }
+    components.push(installer_backup_status());
     if let Ok(artifact) = catalog.artifact("boominstaller") {
         components.push(apk_status(artifact));
     }
@@ -416,5 +470,46 @@ fn status(id: &str, state: ComponentState, detail: Option<&str>) -> ComponentSta
         id: id.to_string(),
         state,
         detail: detail.map(str::to_string),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_managed_installer_backup_states() {
+        let healthy = parse_installer_backup_status(
+            true,
+            "ZNXRUN_STATUS status=healthy alias=healthy uid=10072 anchor=anchored",
+        );
+        assert_eq!(healthy.state, ComponentState::Active);
+
+        let legacy = parse_installer_backup_status(
+            false,
+            "ZNXRUN_STATUS status=legacy alias=healthy uid=10072 anchor=missing",
+        );
+        assert_eq!(legacy.state, ComponentState::Broken);
+
+        let missing = parse_installer_backup_status(
+            false,
+            "ZNXRUN_STATUS status=missing alias=missing uid=none anchor=missing",
+        );
+        assert_eq!(missing.state, ComponentState::Absent);
+
+        let invalid = parse_installer_backup_status(
+            false,
+            "ZNXRUN_STATUS status=invalid alias=invalid uid=none anchor=anchored",
+        );
+        assert_eq!(invalid.state, ComponentState::Incompatible);
+    }
+
+    #[test]
+    fn healthy_marker_requires_success_exit_status() {
+        let state = parse_installer_backup_status(
+            false,
+            "ZNXRUN_STATUS status=healthy alias=healthy uid=10072 anchor=anchored",
+        );
+        assert_eq!(state.state, ComponentState::Broken);
     }
 }

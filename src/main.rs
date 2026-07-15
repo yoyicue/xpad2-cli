@@ -136,6 +136,7 @@ fn command_status(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<(
 fn command_list(catalog: &Catalog) {
     println!("ota              policy   freeze /260 system OTA package for user 0");
     println!("ksu              runtime  KernelSU 32547 / UAPI 2 / current boot");
+    println!("installer-backup policy   managed 0044 UID 10072 fallback installer");
     for id in ["ksu-manager", "xpad-installer", "boominstaller"] {
         if let Ok(a) = catalog.artifact(id) {
             println!(
@@ -146,7 +147,7 @@ fn command_list(catalog: &Catalog) {
             );
         }
     }
-    println!("full             bundle   ksu + ksu-manager + xpad-installer + boominstaller");
+    println!("full             bundle   ksu + managers + xpad-installer + installer-backup");
 }
 
 fn command_info(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<()> {
@@ -167,6 +168,13 @@ fn command_info(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<()>
             "id: ksu\nkind: runtime\nversion: 32547\nuapi: 2\nkmi: xpad2-4.19.191\nlifecycle: current-boot"
         );
         render_component(&device::ksu_status(paths));
+        return Ok(());
+    }
+    if id == "installer-backup" {
+        println!(
+            "id: installer-backup\nkind: policy\nidentity: znxrun / UID 10072\nanchor: com.yoyicue.xpad2.installeranchor\nlifecycle: persistent package metadata"
+        );
+        render_component(&device::installer_backup_status());
         return Ok(());
     }
     let artifact = catalog.artifact(id)?;
@@ -253,6 +261,7 @@ fn command_verify(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<(
             "ksu" => state.state == ComponentState::Active,
             "ota" => state.state == ComponentState::Active,
             "boominstaller" => state.state == ComponentState::Active,
+            "installer-backup" => state.state == ComponentState::Active,
             _ => state.state == ComponentState::Installed,
         };
         if !healthy {
@@ -386,6 +395,16 @@ fn install_arbitrary_apk(catalog: &Catalog, paths: &Paths, args: &[String]) -> R
 fn command_repair(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<()> {
     if args.len() != 1 || args[0] == "full" {
         return Err(msg("usage: xpad2 repair COMPONENT"));
+    }
+    if args[0] == "installer-backup" {
+        return simple_transaction(paths, "repair installer-backup", |log| {
+            device::profile_check(catalog)?;
+            install::install_locked_cli(catalog, paths, "xpad-installer", log)?;
+            Ok(vec![
+                "xpad-installer".to_string(),
+                "installer-backup".to_string(),
+            ])
+        });
     }
     transaction::install_components(catalog, paths, args)
 }
@@ -570,7 +589,7 @@ fn print_help() {
     println!(
         "xpad2 {} - XPad2 /260 root-capable signed installer\n\n\
 Usage:\n  xpad2 status [--json]\n  xpad2 doctor\n  xpad2 list | info COMPONENT\n  xpad2 update [--check] [--version VERSION] [--offline DIRECTORY_OR_ZIP]\n  xpad2 root [-- COMMAND ARG...]\n  xpad2 freeze ota | unfreeze ota\n  xpad2 install COMPONENT...\n  xpad2 install cli FILE [--name NAME]\n  xpad2 install apk FILE\n  xpad2 verify [COMPONENT]\n  xpad2 repair COMPONENT\n  xpad2 cleanup\n  xpad2 logs export DIRECTORY\n  xpad2 cache path|list|verify|import DIRECTORY|prune|clear\n\n\
-Built-ins: ota, ksu, ksu-manager, xpad-installer, boominstaller, full\n\
+Built-ins: ota, ksu, ksu-manager, xpad-installer, installer-backup, boominstaller, full\n\
 Global: --cache-dir DIRECTORY (or XPAD2_CACHE_DIR)\n\n\
 Self-update: --reinstall repairs the same version; a downgrade also requires --allow-downgrade.\n\n\
 Exit 75 means an ordinary reboot is required.",

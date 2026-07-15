@@ -49,30 +49,30 @@ adb -s 你的设备序列号
 ## 3. 下载并校验 xpad2
 
 当前正式版本是
-[`v0.2.3`](https://github.com/yoyicue/xpad2-cli/releases/tag/v0.2.3)。只需要下载：
+[`v0.3.0`](https://github.com/yoyicue/xpad2-cli/releases/tag/v0.3.0)。只需要下载：
 
 ```text
-xpad2-v0.2.3-android-arm64
+xpad2-v0.3.0-android-arm64
 ```
 
 macOS 或 Linux 可以直接执行：
 
 ```sh
-curl -fLO https://github.com/yoyicue/xpad2-cli/releases/download/v0.2.3/xpad2-v0.2.3-android-arm64
-shasum -a 256 xpad2-v0.2.3-android-arm64
+curl -fLO https://github.com/yoyicue/xpad2-cli/releases/download/v0.3.0/xpad2-v0.3.0-android-arm64
+shasum -a 256 xpad2-v0.3.0-android-arm64
 ```
 
 Windows PowerShell 可以执行：
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/yoyicue/xpad2-cli/releases/download/v0.2.3/xpad2-v0.2.3-android-arm64" -OutFile "xpad2-v0.2.3-android-arm64"
-Get-FileHash .\xpad2-v0.2.3-android-arm64 -Algorithm SHA256
+Invoke-WebRequest -Uri "https://github.com/yoyicue/xpad2-cli/releases/download/v0.3.0/xpad2-v0.3.0-android-arm64" -OutFile "xpad2-v0.3.0-android-arm64"
+Get-FileHash .\xpad2-v0.3.0-android-arm64 -Algorithm SHA256
 ```
 
 正确的 SHA-256 是：
 
 ```text
-1ff5a82701a01beb4c62dee1dea02d10d34bd934819fa4205bf123acf59184c4
+bb9f63a3dc7072365522dd2cf5ece18eb8501ccb2be84ddfcab04c775440c46d
 ```
 
 哈希不一致时不要继续，重新下载文件。
@@ -82,7 +82,7 @@ Get-FileHash .\xpad2-v0.2.3-android-arm64 -Algorithm SHA256
 在下载文件所在目录执行：
 
 ```sh
-adb push xpad2-v0.2.3-android-arm64 /data/local/tmp/xpad2
+adb push xpad2-v0.3.0-android-arm64 /data/local/tmp/xpad2
 adb shell chmod 700 /data/local/tmp/xpad2
 adb shell /data/local/tmp/xpad2 version
 ```
@@ -90,7 +90,7 @@ adb shell /data/local/tmp/xpad2 version
 最后一条命令应显示：
 
 ```text
-xpad2 0.2.3 (catalog 2026-07-15.12)
+xpad2 0.3.0 (catalog 2026-07-15.14)
 ```
 
 这就表示 `xpad2` 已经安装到了：
@@ -131,8 +131,9 @@ adb shell /data/local/tmp/xpad2 install full
 3. 激活当前启动周期的 KernelSU；
 4. 安装 KernelSU Manager；
 5. 安装 `xpad-installer`；
-6. 安装并激活 BoomInstaller；
-7. 恢复 SELinux Enforcing，并清理临时 Root 文件和进程。
+6. 建立并验证 UID 10072 的 `installer-backup` 备用安装路径；
+7. 安装并激活 BoomInstaller；
+8. 恢复 SELinux Enforcing，并清理临时 Root 文件和进程。
 
 临时 Root 通常需要几分钟，最多尝试 6 轮，并有 20 分钟安全截止。终端仍在持续输出时
 请耐心等待，不要重复执行命令。
@@ -162,6 +163,7 @@ ota             active
 ksu             active
 ksu-manager     installed
 xpad-installer  installed
+installer-backup active
 boominstaller   active
 ```
 
@@ -190,7 +192,7 @@ adb shell /data/local/tmp/xpad2 install full
 
 普通重启后：
 
-- `xpad2`、两个 APK、`xpad-installer` 和 OTA 冻结状态仍然保留；
+- `xpad2`、两个 APK、`xpad-installer`、`installer-backup` 和 OTA 冻结状态仍然保留；
 - KernelSU late-load 只属于当前启动周期，可能显示为 inactive 或 absent。
 
 需要恢复 KSU 时重新执行：
@@ -200,6 +202,14 @@ adb shell /data/local/tmp/xpad2 install full
 ```
 
 已经安装好的 APK 和 CLI 会被跳过，只恢复缺失的运行时状态。
+
+如果只有 `installer-backup` 不是 `active`，不需要重新 Root，可以单独执行：
+
+```sh
+adb shell /data/local/tmp/xpad2 repair installer-backup
+```
+
+该命令会校验或恢复正式 anchor，再独立验证 `run-as znxrun` 的 UID 为 10072。
 
 ## 10. 恢复系统 OTA
 
@@ -262,7 +272,7 @@ adb shell /data/local/tmp/xpad2 update --offline /data/local/tmp/xpad2-update-vX
 adb shell rm /data/local/tmp/xpad2-update-vX.Y.Z.zip
 ```
 
-如果当前仍是 v0.1.x，需要先按第 3–4 节手工覆盖到当前 v0.2.3 一次；旧版本没有
+如果当前仍是 v0.1.x，需要先按第 3–4 节手工覆盖到当前 v0.3.0 一次；旧版本没有
 自更新命令。
 
 ## 常见问题
