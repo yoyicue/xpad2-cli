@@ -111,8 +111,8 @@ xpad2 update --offline FILE.zip  # 无网络时使用完整离线更新包
 更新无需 Root，也不改变 KSU、APK、OTA 冻结状态或用户数据。安装使用同文件系统的
 `.partial + fsync + rename` 原子替换；旧 ELF 最多保留三份用于失败恢复。低版本不会被
 自动安装；显式降级还必须同时给出 `--version`/`--offline` 和
-`--allow-downgrade`。首次从 v0.1.x 升到 v0.2.0 仍需执行一次手工 `adb push`，因为旧
-ELF 本身没有 updater。
+`--allow-downgrade`。首次从 v0.1.x 升到 v0.2.0 或更高版本仍需执行一次手工
+`adb push`，因为旧 ELF 本身没有 updater。
 
 ## 离线目录缓存
 

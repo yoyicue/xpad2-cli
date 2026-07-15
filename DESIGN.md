@@ -1,12 +1,12 @@
 # XPad2 CLI 设计
 
-状态：v0.2.0 已实现；v0.1.1 完成 BoomInstaller 依赖身份和公开分发材料，v0.1.2
+状态：v0.2.1 已实现；v0.1.1 完成 BoomInstaller 依赖身份和公开分发材料，v0.1.2
 增加可验证的 OTA 冻结策略与 Root 前强制门禁，v0.1.3 对齐 KernelSU 驱动与
 官方生产签名 Manager 的 32547 构建号，v0.1.4 升级 late-load v0.2.1，恢复
 `u:r:ksu:s0` Manager Root 且保持全局 SELinux Enforcing；v0.1.5 将 BoomInstaller
 升级到 Root 主服务 + 隔离 UID 1000 APK broker，并增加开机 Root/ADB 恢复链；v0.2.0
-增加 production RSA 签名的在线/离线自更新、候选双自检、版本隔离 cache 与失败回滚
-（2026-07-15）。
+增加 production RSA 签名的在线/离线自更新、候选双自检、版本隔离 cache 与失败回滚；
+v0.2.1 为 GitHub 多跳下载增加三次有界网络重试（2026-07-15）。
 
 验收覆盖单 ELF、只读状态探针、3-worker IonStack 临时 Root、KernelSU late-load、
 CLI/APK 身份验证、临时 Root 安全收口、同 boot 幂等重跑、普通重启后恢复、RSA 签名
@@ -636,7 +636,7 @@ licenses/
 成为第二条版本线。固定名 update manifest 供 Latest URL 使用，离线 update ZIP 把
 manifest、签名、ELF 和 cache 打成一个可移动但仍需逐项验签的包。
 
-## 14. v0.2.0 验收标准
+## 14. v0.2.1 验收标准
 
 1. 单个 `xpad2` ELF 可以被推送到 `/data/local/tmp` 并正常执行。
 2. `status` 和 `doctor` 不进行 Root 或持久修改。

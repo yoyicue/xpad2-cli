@@ -36,6 +36,7 @@ const MAX_BINARY_SIZE: u64 = 128 * 1024 * 1024;
 const MAX_CACHE_ARCHIVE_SIZE: u64 = 512 * 1024 * 1024;
 const MAX_EXTRACTED_SIZE: u64 = 768 * 1024 * 1024;
 const MAX_ZIP_ENTRIES: usize = 4096;
+const DOWNLOAD_ATTEMPTS: u32 = 3;
 
 #[derive(Clone, Debug)]
 pub struct UpdateRequest {
@@ -704,7 +705,7 @@ fn validate_https_url(value: &str, name: &str) -> Result<()> {
 fn http_agent() -> ureq::Agent {
     ureq::AgentBuilder::new()
         .user_agent(&format!("xpad2/{}", env!("CARGO_PKG_VERSION")))
-        .timeout_connect(Duration::from_secs(20))
+        .timeout_connect(Duration::from_secs(30))
         .timeout_read(Duration::from_secs(120))
         .timeout_write(Duration::from_secs(120))
         .redirects(8)
@@ -712,6 +713,25 @@ fn http_agent() -> ureq::Agent {
 }
 
 fn fetch_small(agent: &ureq::Agent, url: &str, max: usize, label: &str) -> Result<Vec<u8>> {
+    let mut last_error = None;
+    for attempt in 1..=DOWNLOAD_ATTEMPTS {
+        match fetch_small_once(agent, url, max, label) {
+            Ok(bytes) => return Ok(bytes),
+            Err(error) => {
+                if attempt < DOWNLOAD_ATTEMPTS {
+                    eprintln!(
+                        "{label} 网络请求失败（{attempt}/{DOWNLOAD_ATTEMPTS}）：{error}；即将重试…"
+                    );
+                    std::thread::sleep(Duration::from_secs(attempt as u64));
+                }
+                last_error = Some(error);
+            }
+        }
+    }
+    Err(last_error.unwrap_or_else(|| msg(format!("{label} download failed"))))
+}
+
+fn fetch_small_once(agent: &ureq::Agent, url: &str, max: usize, label: &str) -> Result<Vec<u8>> {
     let response = agent
         .get(url)
         .call()
@@ -768,6 +788,32 @@ fn download_file(
     label: &str,
 ) -> Result<()> {
     let agent = http_agent();
+    let mut last_error = None;
+    for attempt in 1..=DOWNLOAD_ATTEMPTS {
+        match download_file_once(&agent, url, target, asset, mode, label) {
+            Ok(()) => return Ok(()),
+            Err(error) => {
+                if attempt < DOWNLOAD_ATTEMPTS {
+                    eprintln!(
+                        "{label} 下载失败（{attempt}/{DOWNLOAD_ATTEMPTS}）：{error}；即将重试…"
+                    );
+                    std::thread::sleep(Duration::from_secs(attempt as u64));
+                }
+                last_error = Some(error);
+            }
+        }
+    }
+    Err(last_error.unwrap_or_else(|| msg(format!("{label} download failed"))))
+}
+
+fn download_file_once(
+    agent: &ureq::Agent,
+    url: &str,
+    target: &Path,
+    asset: &UpdateAsset,
+    mode: u32,
+    label: &str,
+) -> Result<()> {
     let response = agent
         .get(url)
         .call()
