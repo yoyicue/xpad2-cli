@@ -3,6 +3,7 @@ use crate::device;
 use crate::error::{Result, msg, needs_reboot};
 use crate::logging::TransactionLog;
 use crate::model::ComponentState;
+use crate::ota;
 use crate::util::{
     Paths, atomic_write, boot_id, output_text, remove_if_exists, run, selinux, shell_quote,
     unique_id,
@@ -43,6 +44,16 @@ impl RootSession {
     ) -> Result<Self> {
         device::profile_check(catalog)?;
         let started_boot_id = boot_id();
+        let ota_status = ota::freeze(log)?;
+        println!(
+            "✓ ota: {}",
+            ota_status.detail.as_deref().unwrap_or("frozen")
+        );
+        if boot_id() != started_boot_id {
+            return Err(needs_reboot(
+                "Boot ID changed while applying the mandatory pre-Root OTA freeze",
+            ));
+        }
         let existing = device::root_status();
         if existing.state == ComponentState::Active {
             log.event(

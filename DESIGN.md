@@ -1,7 +1,7 @@
 # XPad2 CLI 设计
 
-状态：v0.1.1 已实现；v0.1.0 已完成 `/260` 真机端到端验收，v0.1.1 更新规范化的
-BoomInstaller 依赖身份和公开分发材料（2026-07-15）。
+状态：v0.1.2 已实现；v0.1.1 完成 BoomInstaller 依赖身份和公开分发材料，v0.1.2
+增加可验证的 OTA 冻结策略与 Root 前强制门禁（2026-07-15）。
 
 验收覆盖单 ELF、只读状态探针、3-worker IonStack 临时 Root、KernelSU late-load、
 CLI/APK 身份验证、临时 Root 安全收口、同 boot 幂等重跑、普通重启后恢复、RSA 签名
@@ -235,10 +235,17 @@ xpad2 doctor
 ```sh
 xpad2 root
 xpad2 root -- COMMAND ARG...
+xpad2 freeze ota
+xpad2 unfreeze ota
 ```
 
 - `xpad2 root` 显式获得当前启动周期的临时 Root，并留下可用客户端供操作者使用。
 - `xpad2 root -- ...` 取得 Root 后执行一次命令。
+- 任意 Root 路径必须先通过 `pm disable-user --user 0` 冻结正在运行的 OTA 主包
+  `com.tal.pad.ota`，再从 `dumpsys package` 独立确认 user 0 状态；失败时不得启动 IonStack。
+- OTA 冻结跨重启持久，只有显式 `xpad2 unfreeze ota` 才恢复。停止状态的
+  `com.tal.init.ota` 是 `xpad-installer` 的 31317 secondary trigger，应用升级包
+  `com.tal.pad.app_upgrade` 也不是系统 OTA；两者均不进入冻结集合。
 - 显式 Root 的安全状态、有效期和清理方法必须打印给用户。
 - 不能以 `/data/local/tmp/su` 或 socket 文件存在作为成功依据，必须实际验证
   `su -c id`。
@@ -285,6 +292,7 @@ xpad2 logs export DIRECTORY
 
 | ID | 类型 | 目标状态 | 生命周期 |
 | --- | --- | --- | --- |
+| `ota` | policy | `/260` 系统 OTA 主包对 user 0 不可运行 | 持久，显式解冻 |
 | `ksu` | runtime | KernelSU late-load 接口正常 | 当前启动周期 |
 | `ksu-manager` | APK | `me.weishu.kernelsu` 匹配锁定版本 | 持久 |
 | `xpad-installer` | CLI | `/data/local/tmp/xpad-install` 匹配锁定哈希 | 普通重启后保留 |
@@ -299,17 +307,18 @@ xpad2 logs export DIRECTORY
 1. 获取全局 operation lock
 2. 记录 Boot ID、SELinux、现有 Root/KSU/组件状态
 3. 校验精确 /260 固件、内核和制品锁
-4. 如果 KSU 已健康加载，跳过临时 Root 和 late-load
-5. 否则通过 IonStack POC 获取临时 Root
-6. late-load 锁定版本的 KernelSU
-7. 部署并验证 xpad-install CLI
-8. 安装或升级锁定版本的 KernelSU Manager APK
-9. 安装 BoomInstaller APK
-10. 激活 BoomInstaller 并配置普通开机自启动
-11. 验证所有目标状态
-12. 恢复 SELinux Enforcing
-13. 关闭安装事务创建的临时 su daemon/socket/client
-14. 写入事务收据和日志，释放 operation lock
+4. 冻结并复验 `/260` OTA 主包；失败则停止
+5. 如果 KSU 已健康加载，跳过临时 Root 和 late-load
+6. 否则在 OTA 已冻结的前提下通过 IonStack POC 获取临时 Root
+7. late-load 锁定版本的 KernelSU
+8. 部署并验证 xpad-install CLI
+9. 安装或升级锁定版本的 KernelSU Manager APK
+10. 安装 BoomInstaller APK
+11. 激活 BoomInstaller 并配置普通开机自启动
+12. 验证 OTA、KSU 与全部制品目标状态
+13. 恢复 SELinux Enforcing
+14. 关闭安装事务创建的临时 su daemon/socket/client
+15. 写入事务收据和日志，释放 operation lock
 ```
 
 原则：
@@ -563,11 +572,13 @@ licenses/
 
 1. 单个 `xpad2` ELF 可以被推送到 `/data/local/tmp` 并正常执行。
 2. `status` 和 `doctor` 不进行 Root 或持久修改。
-3. 精确 `/260` 普通启动现场可以执行 `install full`。
-4. 完成后 KernelSU 正常、两个 APK 身份正确、`xpad-install` 哈希正确。
-5. 完成后 SELinux 为 Enforcing，安装事务创建的临时 Root 窗口已关闭。
-6. 再次执行 `install full` 能根据真实状态跳过完成项，不重复 Root 或重装。
-7. 普通重启后 KSU 变为 inactive，但 APK 和 CLI 制品仍在；再次执行可只恢复 KSU。
-8. 从显式本地缓存目录离线完成相同安装，缓存损坏时安全失败。
-9. 六轮 Root 机会耗尽、Boot ID 改变、KSU 不兼容和 APK 签名冲突都有明确诊断。
-10. 任意成功或失败事务均可导出 `xpad2log`。
+3. `freeze ota`/`unfreeze ota` 幂等且只改变锁定的系统 OTA 主包。
+4. 所有 Root 入口在 IonStack 前完成 OTA 冻结，冻结失败时不进入利用链。
+5. 精确 `/260` 普通启动现场可以执行 `install full`。
+6. 完成后 KernelSU 正常、两个 APK 身份正确、`xpad-install` 哈希正确。
+7. 完成后 SELinux 为 Enforcing，安装事务创建的临时 Root 窗口已关闭。
+8. 再次执行 `install full` 能根据真实状态跳过完成项，不重复 Root 或重装。
+9. 普通重启后 KSU 变为 inactive，但 OTA 冻结、APK 和 CLI 制品仍在；再次执行可只恢复 KSU。
+10. 从显式本地缓存目录离线完成相同安装，缓存损坏时安全失败。
+11. 六轮 Root 机会耗尽、Boot ID 改变、KSU 不兼容和 APK 签名冲突都有明确诊断。
+12. 任意成功或失败事务均可导出 `xpad2log`。

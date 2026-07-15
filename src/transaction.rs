@@ -4,6 +4,7 @@ use crate::error::{Error, Result, msg, needs_reboot};
 use crate::install;
 use crate::logging::TransactionLog;
 use crate::model::{ComponentState, Receipt};
+use crate::ota;
 use crate::root::RootSession;
 use crate::util::{OperationLock, Paths, boot_id, selinux};
 use serde_json::json;
@@ -29,6 +30,11 @@ pub fn install_components(catalog: &Catalog, paths: &Paths, requested: &[String]
     let mut result = (|| {
         device::profile_check(catalog)?;
         if components.iter().any(|id| id == "ksu") {
+            let ota_status = ota::freeze(&mut log)?;
+            println!(
+                "✓ ota: {}",
+                ota_status.detail.as_deref().unwrap_or("frozen")
+            );
             if device::ksu_module_loaded() {
                 root_session = Some(RootSession {
                     owned: false,
@@ -71,11 +77,18 @@ pub fn install_components(catalog: &Catalog, paths: &Paths, requested: &[String]
         if boot_id() != started_boot {
             result = Err(needs_reboot("Boot ID changed before final verification"));
         } else if components.iter().any(|id| id == "ksu") {
-            let status = device::ksu_status(paths);
-            if status.state != ComponentState::Active {
+            let ota_status = ota::status();
+            if ota_status.state != ComponentState::Active {
+                result = Err(msg(format!(
+                    "final OTA freeze verification failed: {}",
+                    ota_status.detail.unwrap_or_default()
+                )));
+            }
+            let ksu_status = device::ksu_status(paths);
+            if result.is_ok() && ksu_status.state != ComponentState::Active {
                 result = Err(needs_reboot(format!(
                     "final KernelSU verification failed: {}",
-                    status.detail.unwrap_or_default()
+                    ksu_status.detail.unwrap_or_default()
                 )));
             }
         }

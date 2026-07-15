@@ -1,6 +1,7 @@
 use crate::apk;
 use crate::catalog::Catalog;
 use crate::model::{Artifact, ComponentState, ComponentStatus, DeviceStatus};
+use crate::ota;
 use crate::util::{
     Paths, boot_id, executable_exists, getprop, kernel_release, output_text, run, selinux,
     sha256_file, validate_elf_arm64,
@@ -345,6 +346,7 @@ pub fn snapshot(catalog: &Catalog, paths: &Paths) -> DeviceStatus {
     let supported = fingerprint == catalog.lock.profile.build_fingerprint
         && kernel.starts_with(&catalog.lock.profile.kernel_release_prefix);
     let mut components = Vec::new();
+    components.push(ota::status());
     components.push(ksu_status(paths));
     if let Ok(artifact) = catalog.artifact("ksu-manager") {
         components.push(apk_status(artifact));

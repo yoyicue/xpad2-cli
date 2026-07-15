@@ -6,6 +6,7 @@ mod error;
 mod install;
 mod logging;
 mod model;
+mod ota;
 mod root;
 mod transaction;
 mod util;
@@ -51,6 +52,8 @@ fn run_main() -> Result<()> {
         "doctor" => command_doctor(&catalog, &paths)?,
         "verify" => command_verify(&catalog, &paths, &args[1..])?,
         "root" => command_root(&catalog, &paths, &args[1..])?,
+        "freeze" => command_freeze(&catalog, &paths, &args[1..])?,
+        "unfreeze" => command_unfreeze(&catalog, &paths, &args[1..])?,
         "install" => command_install(&catalog, &paths, &args[1..])?,
         "repair" => command_repair(&catalog, &paths, &args[1..])?,
         "cleanup" => command_cleanup(&paths)?,
@@ -124,6 +127,7 @@ fn command_status(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<(
 }
 
 fn command_list(catalog: &Catalog) {
+    println!("ota              policy   freeze /260 system OTA package for user 0");
     println!("ksu              runtime  KernelSU 32547 / UAPI 2 / current boot");
     for id in ["ksu-manager", "xpad-installer", "boominstaller"] {
         if let Ok(a) = catalog.artifact(id) {
@@ -143,6 +147,14 @@ fn command_info(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<()>
         return Err(msg("usage: xpad2 info COMPONENT"));
     }
     let id = &args[0];
+    if id == "ota" {
+        println!(
+            "id: ota\nkind: policy\npackages: {}\nlifecycle: persistent until `xpad2 unfreeze ota`",
+            ota::PACKAGES.join(", ")
+        );
+        render_component(&ota::status());
+        return Ok(());
+    }
     if id == "ksu" {
         println!(
             "id: ksu\nkind: runtime\nversion: 32547\nuapi: 2\nkmi: xpad2-4.19.191\nlifecycle: current-boot"
@@ -232,6 +244,7 @@ fn command_verify(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<(
                 matches!(state.state, ComponentState::Absent | ComponentState::Active)
             }
             "ksu" => state.state == ComponentState::Active,
+            "ota" => state.state == ComponentState::Active,
             "boominstaller" => state.state == ComponentState::Active,
             _ => state.state == ComponentState::Installed,
         };
@@ -276,7 +289,7 @@ fn command_root(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<()>
         ended_boot_id: boot_id(),
         started_selinux,
         ended_selinux: selinux(),
-        components: vec!["temporary-root".to_string()],
+        components: vec!["ota".to_string(), "temporary-root".to_string()],
         error: error.clone(),
         needs_reboot: false,
     };
@@ -289,6 +302,30 @@ fn command_root(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<()>
         return Err(msg(error));
     }
     Ok(())
+}
+
+fn command_freeze(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<()> {
+    if args.len() != 1 || args[0] != "ota" {
+        return Err(msg("usage: xpad2 freeze ota"));
+    }
+    simple_transaction(paths, "freeze ota", |log| {
+        device::profile_check(catalog)?;
+        let state = ota::freeze(log)?;
+        render_component(&state);
+        Ok(vec!["ota".to_string()])
+    })
+}
+
+fn command_unfreeze(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<()> {
+    if args.len() != 1 || args[0] != "ota" {
+        return Err(msg("usage: xpad2 unfreeze ota"));
+    }
+    simple_transaction(paths, "unfreeze ota", |log| {
+        device::profile_check(catalog)?;
+        let state = ota::unfreeze(log)?;
+        render_component(&state);
+        Ok(vec!["ota".to_string()])
+    })
 }
 
 fn command_install(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<()> {
@@ -510,8 +547,8 @@ fn yes_no(value: bool) -> &'static str {
 fn print_help() {
     println!(
         "xpad2 {} - XPad2 /260 root-capable offline installer\n\n\
-Usage:\n  xpad2 status [--json]\n  xpad2 doctor\n  xpad2 list | info COMPONENT\n  xpad2 root [-- COMMAND ARG...]\n  xpad2 install COMPONENT...\n  xpad2 install cli FILE [--name NAME]\n  xpad2 install apk FILE\n  xpad2 verify [COMPONENT]\n  xpad2 repair COMPONENT\n  xpad2 cleanup\n  xpad2 logs export DIRECTORY\n  xpad2 cache path|list|verify|import DIRECTORY|prune|clear\n\n\
-Built-ins: ksu, ksu-manager, xpad-installer, boominstaller, full\n\
+Usage:\n  xpad2 status [--json]\n  xpad2 doctor\n  xpad2 list | info COMPONENT\n  xpad2 root [-- COMMAND ARG...]\n  xpad2 freeze ota | unfreeze ota\n  xpad2 install COMPONENT...\n  xpad2 install cli FILE [--name NAME]\n  xpad2 install apk FILE\n  xpad2 verify [COMPONENT]\n  xpad2 repair COMPONENT\n  xpad2 cleanup\n  xpad2 logs export DIRECTORY\n  xpad2 cache path|list|verify|import DIRECTORY|prune|clear\n\n\
+Built-ins: ota, ksu, ksu-manager, xpad-installer, boominstaller, full\n\
 Global: --cache-dir DIRECTORY (or XPAD2_CACHE_DIR)\n\n\
 Exit 75 means an ordinary reboot is required.",
         env!("CARGO_PKG_VERSION")

@@ -345,6 +345,16 @@ pub fn export_logs(paths: &Paths, destination: &Path) -> Result<PathBuf> {
             "/system/bin/dumpsys",
             &["package", "com.yoyicue.boominstaller"],
         )?;
+        capture(
+            &staging.join("ota-package.txt"),
+            "/system/bin/dumpsys",
+            &["package", "com.tal.pad.ota"],
+        )?;
+        capture(
+            &staging.join("ota-init-package.txt"),
+            "/system/bin/dumpsys",
+            &["package", "com.tal.init.ota"],
+        )?;
 
         let output = destination.join(format!("xpad2log-{}.zip", timestamp_filename()));
         let file = File::create(&output).at(&output)?;
