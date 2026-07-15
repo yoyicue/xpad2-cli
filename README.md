@@ -3,6 +3,8 @@
 `xpad2` 是运行在 XPad2 Android 设备上的单文件、离线、可按需获得临时 Root 的安装器。
 它只支持已经验证的 `/260` 固件，不提供桌面 GUI、桌面 CLI 或 `xpad2.apk`。
 
+第一次使用请直接阅读：[xpad2 小白使用指南](BEGINNER_GUIDE.md)。
+
 ## 快速开始
 
 从同一版本 Release 下载 `xpad2-vX.Y.Z-android-arm64`：

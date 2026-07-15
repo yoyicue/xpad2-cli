@@ -50,8 +50,9 @@ rm -rf "$STAGE"
 mkdir -p "$PACKAGE/licenses" "$CACHE/blobs"
 cp "$BINARY" "$PACKAGE/xpad2"
 chmod 755 "$PACKAGE/xpad2"
-cp "$ROOT/README.md" "$ROOT/DESIGN.md" "$ROOT/NOTICE.md" "$ROOT/LICENSE" \
-  "$ROOT/assets.lock.json" "$ROOT/sources.lock.json" "$PACKAGE/"
+cp "$ROOT/README.md" "$ROOT/BEGINNER_GUIDE.md" "$ROOT/DESIGN.md" \
+  "$ROOT/NOTICE.md" "$ROOT/LICENSE" "$ROOT/assets.lock.json" \
+  "$ROOT/sources.lock.json" "$PACKAGE/"
 
 cp "$PARENT/xpad2-ionstack-poc/LICENSE" "$PACKAGE/licenses/xpad2-ionstack-poc-LICENSE"
 cp "$PARENT/xpad2-ionstack-poc/NOTICE" "$PACKAGE/licenses/xpad2-ionstack-poc-NOTICE"
