@@ -1,9 +1,9 @@
 [package]
 name = "xpad2"
-version = "0.1.5"
+version = "0.2.0"
 edition = "2024"
 license = "GPL-3.0-or-later"
-description = "Root-capable offline installer for XPad2 /260"
+description = "Root-capable signed installer and self-updater for XPad2 /260"
 repository = "https://github.com/yoyicue/xpad2-cli"
 build = "build.rs"
 
@@ -13,10 +13,13 @@ apksig = { version = "0.4.0", default-features = false, features = ["hash", "sig
 base64 = "0.22.1"
 libc = "0.2.174"
 rsa = { version = "0.9.8", features = ["pem", "sha2"] }
+semver = "1.0.27"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 sha2 = { version = "0.10.9", features = ["oid"] }
 thiserror = "2.0.17"
+ureq = { version = "2.12.1", default-features = false, features = ["tls"] }
+url = "2.5.8"
 zip = { version = "4.6.1", default-features = false, features = ["deflate"] }
 
 [build-dependencies]

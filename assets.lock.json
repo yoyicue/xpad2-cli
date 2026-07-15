@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "product_version": "0.1.5",
-  "catalog_version": "2026-07-15.8",
+  "product_version": "0.2.0",
+  "catalog_version": "2026-07-15.9",
   "profile": {
     "build_fingerprint": "alps/vnd_ls12_mt8797_wifi_64/ls12_mt8797_wifi_64:13/TP1A.220624.014/260:user/release-keys",
     "kernel_release_prefix": "4.19.191",

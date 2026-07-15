@@ -1,6 +1,7 @@
 # xpad2
 
-`xpad2` 是运行在 XPad2 Android 设备上的单文件、离线、可按需获得临时 Root 的安装器。
+`xpad2` 是运行在 XPad2 Android 设备上的单文件、可离线工作、可按需获得临时 Root，
+并能通过签名 Release 自更新的安装器。
 它只支持已经验证的 `/260` 固件，不提供桌面 GUI、桌面 CLI 或 `xpad2.apk`。
 
 第一次使用请直接阅读：[xpad2 小白使用指南](BEGINNER_GUIDE.md)。
@@ -14,6 +15,13 @@ adb -s SERIAL push xpad2-vX.Y.Z-android-arm64 /data/local/tmp/xpad2
 adb -s SERIAL shell chmod 700 /data/local/tmp/xpad2
 adb -s SERIAL shell /data/local/tmp/xpad2 status
 adb -s SERIAL shell /data/local/tmp/xpad2 install full
+```
+
+从 v0.2.0 开始，首次 `adb push` 后可以直接在 Pad 上检查和安装后续稳定版本：
+
+```sh
+adb -s SERIAL shell /data/local/tmp/xpad2 update --check
+adb -s SERIAL shell /data/local/tmp/xpad2 update
 ```
 
 `install full` 会收敛以下目标状态：
@@ -57,6 +65,9 @@ xpad2 status [--json]
 xpad2 doctor
 xpad2 list
 xpad2 info COMPONENT
+xpad2 update --check [--json]
+xpad2 update [--version VERSION]
+xpad2 update --offline DIRECTORY_OR_ZIP
 xpad2 root [-- COMMAND ARG...]
 xpad2 freeze ota
 xpad2 unfreeze ota
@@ -82,9 +93,31 @@ xpad2 cache path|list|verify|import DIRECTORY|prune|clear
 APK；`xpad-installer` 是独立仓库产生的设备 CLI `/data/local/tmp/xpad-install`。
 旧私有仓库名 `xpad2_installer` 已停用，不能再作为任何组件标识。
 
+## 签名自更新
+
+默认 `xpad2 update` 从 `yoyicue/xpad2-cli` 的 GitHub Latest Release 获取固定名的
+`xpad2-update.json` 与签名。HTTPS 只负责传输；更新清单、目标 ELF、匹配的 cache ZIP、
+catalog 和 `/260` profile 均由内置 production RSA 公钥验证。目标 ELF 在替换前必须
+以候选进程完成一次自检，替换后再完成一次相同自检。
+
+```sh
+xpad2 update --check             # 只检查，不下载大文件、不修改设备
+xpad2 update                     # 更新到最新稳定版
+xpad2 update --version 0.2.1     # 选择精确发布版本
+xpad2 update --reinstall         # 同版本修复性重装
+xpad2 update --offline FILE.zip  # 无网络时使用完整离线更新包
+```
+
+更新无需 Root，也不改变 KSU、APK、OTA 冻结状态或用户数据。安装使用同文件系统的
+`.partial + fsync + rename` 原子替换；旧 ELF 最多保留三份用于失败恢复。低版本不会被
+自动安装；显式降级还必须同时给出 `--version`/`--offline` 和
+`--allow-downgrade`。首次从 v0.1.x 升到 v0.2.0 仍需执行一次手工 `adb push`，因为旧
+ELF 本身没有 updater。
+
 ## 离线目录缓存
 
-默认运行目录为 `/data/local/tmp/.xpad2`，制品缓存位于其 `cache/` 子目录。也可使用：
+默认运行目录为 `/data/local/tmp/.xpad2`，每个产品/catalog 组合使用独立的
+`cache/releases/<product>--<catalog>/`，因此新旧 ELF 可以安全并存和回滚。也可使用：
 
 ```sh
 xpad2 install full --cache-dir /data/local/tmp/xpad2-cache
@@ -93,9 +126,9 @@ XPAD2_CACHE_DIR=/data/local/tmp/xpad2-cache xpad2 install full
 
 外部缓存必须同时满足：RSA 发布签名有效、catalog 属于当前 `xpad2` 版本、每个条目
 仍在当前 `assets.lock.json` 中、blob 大小和 SHA-256 正确。缓存不能引入产品未锁定的
-新版本；损坏缓存会安全失败，不会执行其中的 ELF。升级 `xpad2` 后，旧版默认托管缓存
-会被明确忽略并回退到当前 ELF 的内嵌制品；通过 `--cache-dir` 或 `XPAD2_CACHE_DIR`
-显式选择的缓存仍保持严格失败，不会静默回退。
+新版本；损坏缓存会安全失败，不会执行其中的 ELF。自更新把匹配 cache 写入目标版本
+自己的目录，不会覆盖当前版本目录。通过 `--cache-dir` 或 `XPAD2_CACHE_DIR` 显式选择
+的缓存仍保持严格失败；为避免把任意目录卷入跨版本事务，自更新时禁止该覆盖参数。
 
 ## 诊断
 
@@ -123,9 +156,12 @@ tools/verify_release.sh
 
 构建机可以把私有上游的锁定文件放在 `XPAD2_ARTIFACT_DIR`。文件名必须匹配
 `assets.lock.json`，并且大小和 SHA-256 始终重新校验。未指定时，开发机从同级组件
-仓库的固定输出位置读取。设备运行时不联网，也不包含任何 GitHub token 或私有仓库凭据。
+仓库的固定输出位置读取。普通安装完全离线；只有显式 `xpad2 update` 才通过内置
+rustls/webpki HTTPS 客户端访问公开 GitHub Release。设备不包含 GitHub token、私有
+仓库凭据或发布私钥。
 
-离线 cache 的 `catalog.sig` 使用现有 XPad2/BOOM RSA-4096 production identity；
+离线 cache 的 `catalog.sig` 与自更新 `xpad2-update.json.sig` 使用现有 XPad2/BOOM
+RSA-4096 production identity；两种 JSON 都有严格的 kind/schema/字段边界。
 `tools/sign_catalog.sh` 只在发布机内存中恢复 PKCS12 密码和临时私钥，随后销毁临时目录。
 私钥、加密密码和恢复 RSA key 保持在受限本地目录与群晖冷备，绝不进入仓库或诊断包。
 发布 ZIP 同时包含各组件许可证、BoomInstaller 修改声明，以及从 `Cargo.lock` 对应 crate

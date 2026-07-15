@@ -451,6 +451,7 @@ mod tests {
             root: root.clone(),
             cache: root.join("cache"),
             cache_is_explicit: false,
+            managed_cache_root: root.join("cache").join("releases"),
             work: root.join("work"),
             state: root.join("state"),
             logs: root.join("logs"),

@@ -49,30 +49,30 @@ adb -s 你的设备序列号
 ## 3. 下载并校验 xpad2
 
 当前正式版本是
-[`v0.1.5`](https://github.com/yoyicue/xpad2-cli/releases/tag/v0.1.5)。只需要下载：
+[`v0.2.0`](https://github.com/yoyicue/xpad2-cli/releases/tag/v0.2.0)。只需要下载：
 
 ```text
-xpad2-v0.1.5-android-arm64
+xpad2-v0.2.0-android-arm64
 ```
 
 macOS 或 Linux 可以直接执行：
 
 ```sh
-curl -fLO https://github.com/yoyicue/xpad2-cli/releases/download/v0.1.5/xpad2-v0.1.5-android-arm64
-shasum -a 256 xpad2-v0.1.5-android-arm64
+curl -fLO https://github.com/yoyicue/xpad2-cli/releases/download/v0.2.0/xpad2-v0.2.0-android-arm64
+shasum -a 256 xpad2-v0.2.0-android-arm64
 ```
 
 Windows PowerShell 可以执行：
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/yoyicue/xpad2-cli/releases/download/v0.1.5/xpad2-v0.1.5-android-arm64" -OutFile "xpad2-v0.1.5-android-arm64"
-Get-FileHash .\xpad2-v0.1.5-android-arm64 -Algorithm SHA256
+Invoke-WebRequest -Uri "https://github.com/yoyicue/xpad2-cli/releases/download/v0.2.0/xpad2-v0.2.0-android-arm64" -OutFile "xpad2-v0.2.0-android-arm64"
+Get-FileHash .\xpad2-v0.2.0-android-arm64 -Algorithm SHA256
 ```
 
 正确的 SHA-256 是：
 
 ```text
-a40194412115e012601047deb6eb0f35edbed68e816d8a481bfb400d285d8536
+bbee5bb0d49c4540113e12a0afcad7473793ac97b0145d29527109206ddae48b
 ```
 
 哈希不一致时不要继续，重新下载文件。
@@ -82,7 +82,7 @@ a40194412115e012601047deb6eb0f35edbed68e816d8a481bfb400d285d8536
 在下载文件所在目录执行：
 
 ```sh
-adb push xpad2-v0.1.5-android-arm64 /data/local/tmp/xpad2
+adb push xpad2-v0.2.0-android-arm64 /data/local/tmp/xpad2
 adb shell chmod 700 /data/local/tmp/xpad2
 adb shell /data/local/tmp/xpad2 version
 ```
@@ -90,7 +90,7 @@ adb shell /data/local/tmp/xpad2 version
 最后一条命令应显示：
 
 ```text
-xpad2 0.1.5 (catalog 2026-07-15.8)
+xpad2 0.2.0 (catalog 2026-07-15.9)
 ```
 
 这就表示 `xpad2` 已经安装到了：
@@ -242,15 +242,26 @@ adb pull /sdcard/Download/xpad2log-20260715-120000.zip .
 
 ## 12. 更新 xpad2
 
-以后发布新版本时，下载新的 `xpad2-vX.Y.Z-android-arm64`，覆盖原路径即可：
+v0.2.0 以后优先让 Pad 自己检查和安装稳定更新：
 
 ```sh
-adb push xpad2-vX.Y.Z-android-arm64 /data/local/tmp/xpad2
-adb shell chmod 700 /data/local/tmp/xpad2
-adb shell /data/local/tmp/xpad2 version
+adb shell /data/local/tmp/xpad2 update --check
+adb shell /data/local/tmp/xpad2 update
 ```
 
-覆盖 `xpad2` 不会卸载已经安装的 APK，也不会清除应用数据。
+检查不会修改设备。正式更新通常需要 1–3 分钟，会验证签名清单、目标 ELF、匹配的
+catalog/cache 和固件身份，再原子替换自身；不需要 Root、不重启，也不会卸载 APK 或
+清除应用数据。
+
+Pad 无法联网时，在电脑下载同一 Release 的 `xpad2-update-vX.Y.Z.zip`，推送后离线更新：
+
+```sh
+adb push xpad2-update-vX.Y.Z.zip /data/local/tmp/
+adb shell /data/local/tmp/xpad2 update --offline /data/local/tmp/xpad2-update-vX.Y.Z.zip
+adb shell rm /data/local/tmp/xpad2-update-vX.Y.Z.zip
+```
+
+如果当前仍是 v0.1.x，需要先按第 3–4 节手工覆盖到 v0.2.0 一次；旧版本没有自更新命令。
 
 ## 常见问题
 
@@ -272,4 +283,5 @@ adb -s 设备序列号 shell /data/local/tmp/xpad2 status
 
 ### Pad 需要联网吗？
 
-不需要。正式 `xpad2` ELF 已内嵌锁定制品；只有电脑下载 Release 文件时需要网络。
+`install full` 和所有 Root/安装能力都不需要联网，因为 ELF 已内嵌锁定制品。只有选择
+在线 `xpad2 update` 时 Pad 需要访问公开 GitHub Release；也可以使用上面的离线更新包。

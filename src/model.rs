@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct AssetsLock {
     pub schema: u32,
     pub product_version: String,
@@ -9,14 +9,14 @@ pub struct AssetsLock {
     pub artifacts: Vec<Artifact>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct DeviceProfile {
     pub build_fingerprint: String,
     pub kernel_release_prefix: String,
     pub abi: String,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Artifact {
     pub id: String,
     pub filename: String,

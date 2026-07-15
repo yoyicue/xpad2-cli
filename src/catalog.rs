@@ -172,15 +172,11 @@ fn catalog_public_key() -> Result<RsaPublicKey> {
 }
 
 pub fn verify_external_catalog(cache: &Path, baseline: &Catalog) -> Result<AssetsLock> {
-    let catalog_path = cache.join("catalog.json");
-    let signature_path = cache.join("catalog.sig");
-    let raw = fs::read(&catalog_path).at(&catalog_path)?;
-    let sig = fs::read(&signature_path).at(&signature_path)?;
-    verify_catalog_signature(&raw, &sig)?;
-    let external: AssetsLock = serde_json::from_slice(&raw)?;
+    let external = load_signed_external_catalog(cache)?;
     if external.schema != baseline.lock.schema
         || external.product_version != baseline.lock.product_version
         || external.catalog_version != baseline.lock.catalog_version
+        || external.profile != baseline.lock.profile
     {
         return Err(Error::CatalogReleaseMismatch);
     }
@@ -190,18 +186,28 @@ pub fn verify_external_catalog(cache: &Path, baseline: &Catalog) -> Result<Asset
         .iter()
         .map(|a| (a.id.as_str(), a))
         .collect();
+    if external.artifacts.len() != expected.len() {
+        return Err(msg(format!(
+            "external catalog artifact count mismatch: expected {}, got {}",
+            expected.len(),
+            external.artifacts.len()
+        )));
+    }
+    let mut seen = BTreeSet::new();
     for entry in &external.artifacts {
+        if !seen.insert(entry.id.as_str()) {
+            return Err(msg(format!(
+                "external catalog contains duplicate artifact {}",
+                entry.id
+            )));
+        }
         let Some(locked) = expected.get(entry.id.as_str()) else {
             return Err(msg(format!(
                 "external catalog contains unlocked artifact {}",
                 entry.id
             )));
         };
-        if entry.sha256 != locked.sha256
-            || entry.size != locked.size
-            || entry.kind != locked.kind
-            || entry.version != locked.version
-        {
+        if entry != *locked {
             return Err(msg(format!(
                 "external catalog changes locked identity for {}",
                 entry.id
@@ -209,6 +215,15 @@ pub fn verify_external_catalog(cache: &Path, baseline: &Catalog) -> Result<Asset
         }
     }
     Ok(external)
+}
+
+pub fn load_signed_external_catalog(cache: &Path) -> Result<AssetsLock> {
+    let catalog_path = cache.join("catalog.json");
+    let signature_path = cache.join("catalog.sig");
+    let raw = fs::read(&catalog_path).at(&catalog_path)?;
+    let sig = fs::read(&signature_path).at(&signature_path)?;
+    verify_catalog_signature(&raw, &sig)?;
+    Ok(serde_json::from_slice(&raw)?)
 }
 
 pub fn verify_blob(path: &Path, artifact: &Artifact) -> Result<()> {
@@ -252,14 +267,19 @@ pub fn import_cache(source: &Path, paths: &Paths, baseline: &Catalog) -> Result<
 }
 
 pub fn verify_cache(paths: &Paths, baseline: &Catalog) -> Result<Vec<String>> {
-    let external = verify_external_catalog(&paths.cache, baseline)?;
+    verify_complete_external_cache(&paths.cache, baseline)
+}
+
+pub fn verify_complete_external_cache(cache: &Path, baseline: &Catalog) -> Result<Vec<String>> {
+    let external = verify_external_catalog(cache, baseline)?;
     let mut verified = Vec::new();
     for artifact in external.artifacts.iter().filter(|a| a.embedded) {
-        let blob = paths.cache.join("blobs").join(&artifact.sha256);
-        if blob.exists() {
-            verify_blob(&blob, artifact)?;
-            verified.push(artifact.id.clone());
+        let blob = cache.join("blobs").join(&artifact.sha256);
+        if !blob.is_file() {
+            return Err(msg(format!("cache blob missing: {}", artifact.id)));
         }
+        verify_blob(&blob, artifact)?;
+        verified.push(artifact.id.clone());
     }
     Ok(verified)
 }

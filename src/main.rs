@@ -9,6 +9,7 @@ mod model;
 mod ota;
 mod root;
 mod transaction;
+mod update;
 mod util;
 
 use crate::catalog::Catalog;
@@ -31,8 +32,12 @@ fn main() {
 
 fn run_main() -> Result<()> {
     let (args, cache_override) = parse_global_options(std::env::args().skip(1).collect())?;
-    let paths = Paths::new(cache_override.as_deref());
     let catalog = Catalog::load()?;
+    let paths = Paths::new(
+        cache_override.as_deref(),
+        &catalog.lock.product_version,
+        &catalog.lock.catalog_version,
+    )?;
     let Some(command) = args.first().map(String::as_str) else {
         print_help();
         return Ok(());
@@ -59,6 +64,8 @@ fn run_main() -> Result<()> {
         "cleanup" => command_cleanup(&paths)?,
         "logs" => command_logs(&paths, &args[1..])?,
         "cache" => command_cache(&catalog, &paths, &args[1..])?,
+        "update" => command_update(&catalog, &paths, &args[1..])?,
+        "_update-verify-candidate" => update::verify_candidate_command(&catalog, &args[1..])?,
         other => return Err(msg(format!("unknown command: {other}; run `xpad2 help`"))),
     }
     Ok(())
@@ -501,6 +508,21 @@ fn command_cache(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<()
     Ok(())
 }
 
+fn command_update(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<()> {
+    let request = update::parse_args(args)?;
+    if request.check {
+        return update::check(catalog, paths, &request);
+    }
+    simple_transaction(paths, "self update", |log| {
+        let changed = update::apply(catalog, paths, &request, log)?;
+        Ok(if changed {
+            vec!["xpad2".to_string()]
+        } else {
+            vec![]
+        })
+    })
+}
+
 fn simple_transaction<F>(paths: &Paths, operation: &str, action: F) -> Result<()>
 where
     F: FnOnce(&mut TransactionLog) -> Result<Vec<String>>,
@@ -546,10 +568,11 @@ fn yes_no(value: bool) -> &'static str {
 
 fn print_help() {
     println!(
-        "xpad2 {} - XPad2 /260 root-capable offline installer\n\n\
-Usage:\n  xpad2 status [--json]\n  xpad2 doctor\n  xpad2 list | info COMPONENT\n  xpad2 root [-- COMMAND ARG...]\n  xpad2 freeze ota | unfreeze ota\n  xpad2 install COMPONENT...\n  xpad2 install cli FILE [--name NAME]\n  xpad2 install apk FILE\n  xpad2 verify [COMPONENT]\n  xpad2 repair COMPONENT\n  xpad2 cleanup\n  xpad2 logs export DIRECTORY\n  xpad2 cache path|list|verify|import DIRECTORY|prune|clear\n\n\
+        "xpad2 {} - XPad2 /260 root-capable signed installer\n\n\
+Usage:\n  xpad2 status [--json]\n  xpad2 doctor\n  xpad2 list | info COMPONENT\n  xpad2 update [--check] [--version VERSION] [--offline DIRECTORY_OR_ZIP]\n  xpad2 root [-- COMMAND ARG...]\n  xpad2 freeze ota | unfreeze ota\n  xpad2 install COMPONENT...\n  xpad2 install cli FILE [--name NAME]\n  xpad2 install apk FILE\n  xpad2 verify [COMPONENT]\n  xpad2 repair COMPONENT\n  xpad2 cleanup\n  xpad2 logs export DIRECTORY\n  xpad2 cache path|list|verify|import DIRECTORY|prune|clear\n\n\
 Built-ins: ota, ksu, ksu-manager, xpad-installer, boominstaller, full\n\
 Global: --cache-dir DIRECTORY (or XPAD2_CACHE_DIR)\n\n\
+Self-update: --reinstall repairs the same version; a downgrade also requires --allow-downgrade.\n\n\
 Exit 75 means an ordinary reboot is required.",
         env!("CARGO_PKG_VERSION")
     );

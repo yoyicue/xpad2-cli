@@ -16,6 +16,7 @@ pub struct Paths {
     pub root: PathBuf,
     pub cache: PathBuf,
     pub cache_is_explicit: bool,
+    pub managed_cache_root: PathBuf,
     pub work: PathBuf,
     pub state: PathBuf,
     pub logs: PathBuf,
@@ -23,26 +24,50 @@ pub struct Paths {
 }
 
 impl Paths {
-    pub fn new(cache_override: Option<&Path>) -> Self {
+    pub fn new(
+        cache_override: Option<&Path>,
+        product_version: &str,
+        catalog_version: &str,
+    ) -> Result<Self> {
         let cache_override = cache_override
             .map(Path::to_path_buf)
             .or_else(|| std::env::var_os("XPAD2_CACHE_DIR").map(PathBuf::from));
         let cache_is_explicit = cache_override.is_some();
         let state_root = PathBuf::from(DEFAULT_ROOT);
-        let cache = cache_override.unwrap_or_else(|| state_root.join("cache"));
-        Self {
+        let managed_cache_root = state_root.join("cache").join("releases");
+        let cache = match cache_override {
+            Some(path) => path,
+            None => managed_cache_path_at(&managed_cache_root, product_version, catalog_version)?,
+        };
+        Ok(Self {
             cache,
             cache_is_explicit,
+            managed_cache_root,
             work: state_root.join("work"),
             state: state_root.join("state"),
             logs: state_root.join("logs"),
             lock: state_root.join("operation.lock"),
             root: state_root,
-        }
+        })
+    }
+
+    pub fn managed_cache_path(
+        &self,
+        product_version: &str,
+        catalog_version: &str,
+    ) -> Result<PathBuf> {
+        managed_cache_path_at(&self.managed_cache_root, product_version, catalog_version)
     }
 
     pub fn ensure(&self) -> Result<()> {
-        for path in [&self.root, &self.cache, &self.work, &self.state, &self.logs] {
+        for path in [
+            &self.root,
+            &self.managed_cache_root,
+            &self.cache,
+            &self.work,
+            &self.state,
+            &self.logs,
+        ] {
             fs::create_dir_all(path).at(path)?;
             fs::set_permissions(path, fs::Permissions::from_mode(0o700)).at(path)?;
         }
@@ -66,6 +91,29 @@ impl Paths {
         }
         Ok(())
     }
+}
+
+fn managed_cache_path_at(
+    root: &Path,
+    product_version: &str,
+    catalog_version: &str,
+) -> Result<PathBuf> {
+    for (name, value) in [
+        ("product version", product_version),
+        ("catalog version", catalog_version),
+    ] {
+        if value.is_empty()
+            || value.len() > 96
+            || value.starts_with('.')
+            || value.contains("..")
+            || !value
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_'))
+        {
+            return Err(msg(format!("unsafe {name} for managed cache: {value:?}")));
+        }
+    }
+    Ok(root.join(format!("{product_version}--{catalog_version}")))
 }
 
 pub struct OperationLock {
@@ -308,5 +356,17 @@ mod tests {
     #[test]
     fn shell_quote_handles_single_quotes() {
         assert_eq!(shell_quote("a'b"), "'a'\\''b'");
+    }
+
+    #[test]
+    fn managed_cache_paths_are_version_scoped_and_safe() {
+        let root = Path::new("/cache/releases");
+        assert_eq!(
+            managed_cache_path_at(root, "0.2.0", "2026-07-15.9").unwrap(),
+            root.join("0.2.0--2026-07-15.9")
+        );
+        for bad in ["", "../0.2.0", "0/2/0", ".hidden", "0..2"] {
+            assert!(managed_cache_path_at(root, bad, "catalog").is_err());
+        }
     }
 }
