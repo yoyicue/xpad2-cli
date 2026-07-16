@@ -401,24 +401,43 @@ pub fn apk_status(artifact: &Artifact) -> ComponentStatus {
         );
     };
     if artifact.id == "boominstaller" {
-        let service = run("/system/bin/pidof", &["boominstaller_server"])
-            .or_else(|_| run("pidof", &["boominstaller_server"]));
         let autostart = global_setting("adb_enabled").as_deref() == Some("1")
             && global_setting("adb_wifi_enabled").as_deref() == Some("1")
             && global_setting("adb_allowed_connection_time").as_deref() == Some("0");
-        let service_active = service
-            .map(|o| o.status.success() && !o.stdout.is_empty())
-            .unwrap_or(false);
-        if service_active && autostart {
+        let service_uids = match named_process_uids("boominstaller_server") {
+            Ok(uids) => uids,
+            Err(error) => {
+                return status(
+                    &artifact.id,
+                    ComponentState::Broken,
+                    Some(&format!(
+                        "cannot verify BoomInstaller service identity: {error}"
+                    )),
+                );
+            }
+        };
+        let service_identity = boom_service_identity(&service_uids);
+        if let Err(error) = &service_identity {
+            return status(
+                &artifact.id,
+                ComponentState::Broken,
+                Some(&format!(
+                    "APK identity is correct but BoomInstaller runtime is unsafe: {error}"
+                )),
+            );
+        }
+        if let Ok(Some((uid, mode))) = service_identity
+            && autostart
+        {
             status(
                 &artifact.id,
                 ComponentState::Active,
                 Some(&format!(
-                    "APK identity, installer={}, system service and autostart settings verified",
-                    attribution
+                    "APK identity, installer={}, service uid={} ({}) and autostart settings verified",
+                    attribution, uid, mode
                 )),
             )
-        } else if autostart {
+        } else if service_uids.is_empty() && autostart {
             status(
                 &artifact.id,
                 ComponentState::Ready,
@@ -446,6 +465,54 @@ pub fn apk_status(artifact: &Artifact) -> ComponentStatus {
                 attribution
             )),
         )
+    }
+}
+
+fn named_process_uids(name: &str) -> std::result::Result<Vec<u32>, String> {
+    let output = run("/system/bin/pidof", &[name])
+        .or_else(|_| run("pidof", &[name]))
+        .map_err(|error| error.to_string())?;
+    if !output.status.success() || output.stdout.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut uids = Vec::new();
+    for value in output_text(&output).split_whitespace() {
+        let pid = value
+            .parse::<u32>()
+            .map_err(|_| format!("pidof returned invalid PID {value:?}"))?;
+        let path = format!("/proc/{pid}/status");
+        let process_status =
+            fs::read_to_string(&path).map_err(|error| format!("cannot read {path}: {error}"))?;
+        let uid = parse_proc_status_uid(&process_status)
+            .ok_or_else(|| format!("{path} has no valid Uid field"))?;
+        uids.push(uid);
+    }
+    uids.sort_unstable();
+    Ok(uids)
+}
+
+fn parse_proc_status_uid(process_status: &str) -> Option<u32> {
+    process_status
+        .lines()
+        .find_map(|line| line.strip_prefix("Uid:"))?
+        .split_whitespace()
+        .next()?
+        .parse()
+        .ok()
+}
+
+fn boom_service_identity(uids: &[u32]) -> std::result::Result<Option<(u32, &'static str)>, String> {
+    match uids {
+        [] => Ok(None),
+        [0] => Ok(Some((0, "root"))),
+        [2000] => Ok(Some((2000, "adb-shell"))),
+        [uid] => Err(format!(
+            "unsupported uid={uid}; only root uid=0 or adb-shell uid=2000 is allowed"
+        )),
+        _ => Err(format!(
+            "multiple service identities are present: {:?}",
+            uids
+        )),
     }
 }
 
@@ -631,5 +698,28 @@ mod tests {
             "ZNXRUN_STATUS status=healthy alias=healthy uid=10072 anchor=anchored",
         );
         assert_eq!(state.state, ComponentState::Broken);
+    }
+
+    #[test]
+    fn boom_service_accepts_only_one_root_or_adb_shell_identity() {
+        assert_eq!(boom_service_identity(&[]), Ok(None));
+        assert_eq!(boom_service_identity(&[0]), Ok(Some((0, "root"))));
+        assert_eq!(
+            boom_service_identity(&[2000]),
+            Ok(Some((2000, "adb-shell")))
+        );
+        assert!(boom_service_identity(&[1000]).is_err());
+        assert!(boom_service_identity(&[10072]).is_err());
+        assert!(boom_service_identity(&[0, 2000]).is_err());
+        assert!(boom_service_identity(&[2000, 2000]).is_err());
+    }
+
+    #[test]
+    fn parses_real_uid_from_proc_status() {
+        assert_eq!(
+            parse_proc_status_uid("Name:\tboominstaller_server\nUid:\t2000\t2000\t2000\t2000\n"),
+            Some(2000)
+        );
+        assert_eq!(parse_proc_status_uid("Name:\tmissing\n"), None);
     }
 }

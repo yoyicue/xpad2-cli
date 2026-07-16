@@ -250,8 +250,8 @@ pub fn install_locked_apk(
     let artifact = catalog.artifact(id)?;
     let mut current = device::apk_status(artifact);
     if id == "boominstaller" && current.state == ComponentState::Ready {
-        println!("BoomInstaller 自启动正在收敛，最多等待 15 秒…");
-        for _ in 0..15 {
+        println!("BoomInstaller 本地 ADB 自启动正在收敛，最多等待 60 秒…");
+        for _ in 0..60 {
             thread::sleep(Duration::from_secs(1));
             current = device::apk_status(artifact);
             if current.state == ComponentState::Active {
@@ -409,7 +409,7 @@ fn install_apk_with_xpad_install(
     let already_installed = device::installed_apk_identity(&identity.package)?.is_some();
     let (verb, backend, action) = apk_install_plan(already_installed);
     println!(
-        "{action} {}：后端={backend}，通常 10–90 秒；若 Android 报 process is bad，将停止并要求普通重启。",
+        "{action} {}：只通过受管 0044，通常 10–30 秒；若需要用 31317 补回 0044，总计最多约 60 秒。若 Android 报 process is bad，将停止并要求普通重启。",
         identity.package,
     );
     log.event(
@@ -439,10 +439,9 @@ fn install_apk_with_xpad_install(
 
 fn apk_install_plan(already_installed: bool) -> (&'static str, &'static str, &'static str) {
     if already_installed {
-        // Keep the persistent UID 10072/0044 identity ahead of temporary root
-        // and UID 1000/31317. xpad-install's auto path detects a provider that
-        // did not commit, falls back within the selected identity, and repairs
-        // 0044 after any lower-priority transport.
+        // Every target APK stays inside the persistent UID 10072/0044 identity.
+        // The auto backend may switch from Provider to PackageInstaller within
+        // that identity; guarded 31317 is only allowed to repair 0044 first.
         ("upgrade", "auto", "升级")
     } else {
         ("install", "auto", "安装")
@@ -566,7 +565,7 @@ mod tests {
     use std::path::Path;
 
     #[test]
-    fn apk_installs_and_updates_prioritize_the_managed_0044_identity() {
+    fn apk_installs_and_updates_use_the_managed_0044_identity() {
         assert_eq!(apk_install_plan(false), ("install", "auto", "安装"));
         assert_eq!(apk_install_plan(true), ("upgrade", "auto", "升级"));
     }

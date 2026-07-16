@@ -4,12 +4,39 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 LOCK="$ROOT/sources.lock.json"
 
-for command in curl git jq; do
+for command in git jq; do
   command -v "$command" >/dev/null || {
     printf 'required command not found: %s\n' "$command" >&2
     exit 1
   }
 done
+
+GH_AUTHENTICATED=0
+if command -v gh >/dev/null && gh auth status --hostname github.com >/dev/null 2>&1; then
+  GH_AUTHENTICATED=1
+elif ! command -v curl >/dev/null; then
+  printf 'source verification requires authenticated gh or curl\n' >&2
+  exit 1
+fi
+
+github_api() {
+  local endpoint=$1 attempt output
+  for attempt in 1 2 3; do
+    if [[ "$GH_AUTHENTICATED" == 1 ]]; then
+      endpoint=${endpoint#https://api.github.com/}
+      if output=$(gh api "$endpoint"); then
+        printf '%s\n' "$output"
+        return 0
+      fi
+    elif output=$(curl --fail --silent --show-error --location \
+      -H 'Accept: application/vnd.github+json' "$endpoint"); then
+      printf '%s\n' "$output"
+      return 0
+    fi
+    sleep "$attempt"
+  done
+  return 1
+}
 
 jq -e '
   .schema == 1 and
@@ -36,9 +63,7 @@ verified=0
 while IFS=$'\t' read -r repository tag expected tag_expected workflow_run \
   workflow_artifact; do
   slug=${repository#https://github.com/}
-  canonical=$(curl --fail --silent --show-error --location \
-    -H 'Accept: application/vnd.github+json' \
-    "https://api.github.com/repos/$slug" | jq -r '.html_url')
+  canonical=$(github_api "https://api.github.com/repos/$slug" | jq -r '.html_url')
   [[ "$canonical" == "$repository" ]] || {
     printf 'non-canonical or renamed repository: locked=%s canonical=%s\n' \
       "$repository" "$canonical" >&2
@@ -64,9 +89,7 @@ while IFS=$'\t' read -r repository tag expected tag_expected workflow_run \
   }
 
   if [[ "$expected" != "$tag_expected" ]]; then
-    run=$(curl --fail --silent --show-error --location \
-      -H 'Accept: application/vnd.github+json' \
-      "https://api.github.com/repos/$slug/actions/runs/$workflow_run")
+    run=$(github_api "https://api.github.com/repos/$slug/actions/runs/$workflow_run")
     jq -e --arg commit "$expected" '
       .head_sha == $commit and
       .event == "push" and
@@ -78,8 +101,7 @@ while IFS=$'\t' read -r repository tag expected tag_expected workflow_run \
       exit 1
     }
     artifacts_url=$(jq -r '.artifacts_url' <<<"$run")
-    artifacts=$(curl --fail --silent --show-error --location \
-      -H 'Accept: application/vnd.github+json' "$artifacts_url")
+    artifacts=$(github_api "$artifacts_url")
     jq -e --arg artifact "$workflow_artifact" '
       any(.artifacts[]; .name == $artifact)
     ' <<<"$artifacts" >/dev/null || {

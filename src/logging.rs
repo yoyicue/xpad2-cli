@@ -459,6 +459,11 @@ pub fn export_logs(paths: &Paths, destination: &Path) -> Result<PathBuf> {
             "/system/bin/dumpsys",
             &["activity", "processes"],
         )?;
+        capture(
+            &staging.join("process-identities.txt"),
+            "/system/bin/ps",
+            &["-A", "-o", "USER,UID,PID,PPID,NAME"],
+        )?;
         capture(&staging.join("dmesg.txt"), "/system/bin/dmesg", &[])?;
         if Path::new("/data/local/tmp/xpad-install").is_file() {
             capture(
@@ -466,7 +471,23 @@ pub fn export_logs(paths: &Paths, destination: &Path) -> Result<PathBuf> {
                 "/data/local/tmp/xpad-install",
                 &["self-test"],
             )?;
+            capture(
+                &staging.join("xpad-install-0044-status.txt"),
+                "/data/local/tmp/xpad-install",
+                &["znxrun", "status"],
+            )?;
         }
+        capture(
+            &staging.join("boom-autostart-status.txt"),
+            "/system/bin/content",
+            &[
+                "call",
+                "--uri",
+                "content://com.yoyicue.boominstaller.shizuku",
+                "--method",
+                "getAutoStartStatus",
+            ],
+        )?;
         capture(
             &staging.join("ksu-package.txt"),
             "/system/bin/dumpsys",
@@ -510,6 +531,10 @@ pub fn export_logs(paths: &Paths, destination: &Path) -> Result<PathBuf> {
                 "xpad-installer-incidents",
                 options,
             )?;
+        }
+        let boom_installs = Path::new("/data/local/tmp/.boominstaller/logs");
+        if boom_installs.exists() {
+            add_redacted_text_tree(&mut zip, boom_installs, "boominstaller-installs", options)?;
         }
         if Path::new("/sys/fs/pstore").is_dir() {
             let _ = add_tree(&mut zip, Path::new("/sys/fs/pstore"), "pstore", options);
@@ -565,6 +590,38 @@ fn add_tree(
             file.read_to_end(&mut data).at(&path)?;
             zip.write_all(&data)
                 .map_err(|e| msg(format!("write diagnostic ZIP: {e}")))?;
+        }
+    }
+    Ok(())
+}
+
+fn add_redacted_text_tree(
+    zip: &mut ZipWriter<File>,
+    root: &Path,
+    prefix: &str,
+    options: SimpleFileOptions,
+) -> Result<()> {
+    if !root.exists() {
+        return Ok(());
+    }
+    let mut entries = fs::read_dir(root)
+        .at(root)?
+        .collect::<std::io::Result<Vec<_>>>()
+        .at(root)?;
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
+        let path = entry.path();
+        let name = format!("{prefix}/{}", entry.file_name().to_string_lossy());
+        let kind = entry.file_type().at(&path)?;
+        if kind.is_dir() {
+            add_redacted_text_tree(zip, &path, &name, options)?;
+        } else if kind.is_file() {
+            let data = fs::read(&path).at(&path)?;
+            let text = String::from_utf8_lossy(&data);
+            let redacted = text.lines().map(redact).collect::<Vec<_>>().join("\n");
+            zip.start_file(name, options)?;
+            zip.write_all(redacted.as_bytes())
+                .map_err(|error| msg(format!("write redacted diagnostic ZIP: {error}")))?;
         }
     }
     Ok(())
