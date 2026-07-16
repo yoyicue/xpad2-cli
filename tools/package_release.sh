@@ -63,7 +63,7 @@ source_for() {
     ksu-manager) printf '%s\n' "$PARENT/xpad2-reroot-android/app/src/main/res/raw/kernelsu_manager_v3_2_5_22_gccfee6dc_32547.apk" ;;
     suu-manager) printf '%s\n' "$PARENT/xpad2-sukisu-lateload/artifacts/SukiSU_v4.1.3_40796-release.apk" ;;
     xpad-installer) printf '%s\n' "$PARENT/xpad-installer/dist/xpad-install" ;;
-    boominstaller) printf '%s\n' "$PARENT/BoomInstaller/out/apk/BoomInstaller-v13.6.0.r17.d3dd903-production.apk" ;;
+    boominstaller) printf '%s\n' "$PARENT/BoomInstaller/out/apk/BoomInstaller-v13.6.0.r18.757df9e-production.apk" ;;
     *) return 1 ;;
   esac
 }

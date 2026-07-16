@@ -419,7 +419,7 @@ fn install_apk_with_xpad_install(
     let already_installed = device::installed_apk_identity(&identity.package)?.is_some();
     let (verb, backend, action) = apk_install_plan(already_installed);
     println!(
-        "{action} {}：只通过受管 0044，通常 10–30 秒；若需要用 31317 补回 0044，总计最多约 60 秒。若 Android 报 process is bad，将停止并要求普通重启。",
+        "{action} {}：只通过受管 0044；若需修复安装身份，提交后会只读检测最多约 5 分钟。若返回 pending，请等待后运行 xpad2 status，不要重复安装。",
         identity.package,
     );
     log.event(
@@ -537,7 +537,11 @@ fn classify_installer_error(
     text: &str,
 ) -> crate::error::Error {
     let lower = text.to_ascii_lowercase();
-    if exit_code == Some(75) {
+    if exit_code == Some(76) {
+        msg(format!(
+            "{context}: installer identity repair was committed but Android is still refreshing; the target APK was not installed. Wait, then run `xpad2 status` to recheck. Do not repeat install or run ensure/31317 while status is pending"
+        ))
+    } else if exit_code == Some(75) {
         needs_reboot(format!(
             "{context}: xpad-install safety circuit breaker tripped; reboot clears this per-boot state"
         ))
@@ -593,5 +597,13 @@ mod tests {
     fn installer_exit_75_is_always_a_reboot_requirement() {
         let error = classify_installer_error("test", Some(75), "no textual hint");
         assert!(error.requires_reboot());
+    }
+
+    #[test]
+    fn installer_exit_76_is_pending_not_reboot() {
+        let error = classify_installer_error("test", Some(76), "repair_committed=true");
+        assert!(!error.requires_reboot());
+        assert!(error.to_string().contains("xpad2 status"));
+        assert!(error.to_string().contains("Do not repeat install"));
     }
 }
