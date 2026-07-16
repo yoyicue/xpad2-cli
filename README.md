@@ -123,15 +123,21 @@ APK；`xpad-installer` 是独立仓库产生的设备 CLI `/data/local/tmp/xpad-
 `xpad2-update.json`、签名和 asset ID，再由 API 重定向到 release-assets 下载域；不要求
 设备能够直连 `github.com:443`。HTTPS 只负责传输，GitHub API JSON 本身不作为信任根；
 更新清单、目标 ELF、catalog 签名和 `/260` profile 均由内置 production RSA 公钥及
-SHA-256 验证。新候选 ELF 验证自身后直接导出其内嵌 cache，正常在线更新不再重复下载
-约 30 MiB 的 cache ZIP；该 ZIP 只为旧 updater 和独立离线导入保留。目标 ELF 在替换前后
-均以候选进程自检。下载 partial 支持 HTTP Range 续传；只重试网络/5xx 等暂态错误，
-GitHub 403/429 会遵循 `Retry-After`/rate-limit reset，而不是短间隔空转。
+SHA-256 验证。v0.4.6 起还会读取独立签名的 `xpad2-deltas.json`：只有当前 ELF 的版本、
+大小和 SHA-256 与某个发布基线全部精确一致，才下载对应 zstd patch；重建结果仍必须精确
+匹配主更新清单中的目标大小和 SHA-256。索引不存在、没有匹配基线或 patch 下载/重建失败
+时自动回退完整 ELF；索引或签名成对出现但无效时硬失败。由于旧 updater 不认识 delta，
+从 v0.4.5 升级 v0.4.6 仍会下载一次完整 ELF，后续相邻版本才获得增量收益。
+
+新候选 ELF 验证自身后直接导出其内嵌 cache，正常在线更新不再重复下载约 30 MiB 的
+cache ZIP；该 ZIP 只为旧 updater 和独立离线导入保留。目标 ELF 在替换前后均以候选进程
+自检。下载 partial 支持 HTTP Range 续传；只重试网络/5xx 等暂态错误，GitHub 403/429
+会遵循 `Retry-After`/rate-limit reset，而不是短间隔空转。
 
 ```sh
 xpad2 update --check             # 只检查，不下载大文件、不修改设备
 xpad2 update                     # 更新到最新稳定版
-xpad2 update --version 0.4.5     # 选择精确发布版本
+xpad2 update --version 0.4.6     # 选择精确发布版本
 xpad2 update --reinstall         # 同版本修复性重装
 xpad2 update --offline FILE.zip  # 无网络时使用完整离线更新包
 ```

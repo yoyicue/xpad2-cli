@@ -35,6 +35,9 @@ openssl dgst -sha256 -verify "$ROOT/keys/catalog-release-public.pem" \
 openssl dgst -sha256 -verify "$ROOT/keys/catalog-release-public.pem" \
   -signature "$DIST/catalog.sig" \
   "$ROOT/assets.lock.json" >/dev/null
+openssl dgst -sha256 -verify "$ROOT/keys/catalog-release-public.pem" \
+  -signature "$DIST/xpad2-deltas.json.sig" \
+  "$DIST/xpad2-deltas.json" >/dev/null
 cp "$DIST/xpad2-update.json" "$tmp_dir/tampered-update.json"
 printf '\n' >> "$tmp_dir/tampered-update.json"
 if openssl dgst -sha256 -verify "$ROOT/keys/catalog-release-public.pem" \
@@ -82,11 +85,54 @@ jq -e \
   .release_url == ("https://github.com/yoyicue/xpad2-cli/releases/tag/v" + $version)
 ' "$DIST/xpad2-update.json" >/dev/null
 
+delta_base_version=$(jq -r '.deltas[0].from_version' "$DIST/xpad2-deltas.json")
+delta_filename="xpad2-delta-v$delta_base_version-to-v$VERSION-android-arm64.zst"
+delta_base="$DIST/xpad2-v$delta_base_version-android-arm64"
+[[ -f "$delta_base" ]] || {
+  printf 'delta base binary missing during verification: %s\n' "$delta_base" >&2
+  exit 1
+}
+delta_base_sha=$(shasum -a 256 "$delta_base" | awk '{print $1}')
+delta_base_size=$(wc -c < "$delta_base" | tr -d ' ')
+delta_sha=$(shasum -a 256 "$DIST/$delta_filename" | awk '{print $1}')
+delta_size=$(wc -c < "$DIST/$delta_filename" | tr -d ' ')
+jq -e \
+  --arg repository "https://github.com/yoyicue/xpad2-cli" \
+  --arg target_version "$VERSION" \
+  --argjson target_binary "$(jq -c '.binary' "$DIST/xpad2-update.json")" \
+  --arg from_version "$delta_base_version" \
+  --argjson from_size "$delta_base_size" \
+  --arg from_sha "$delta_base_sha" \
+  --arg patch_filename "$delta_filename" \
+  --arg patch_sha "$delta_sha" \
+  --argjson patch_size "$delta_size" '
+  (keys | sort) == (["deltas","kind","repository","schema","target_binary","target_version"] | sort) and
+  .schema == 1 and .kind == "xpad2-deltas" and .repository == $repository and
+  .target_version == $target_version and .target_binary == $target_binary and
+  (.deltas | length) == 1 and
+  (.deltas[0] | keys | sort) == (["from_sha256","from_size","from_version","patch"] | sort) and
+  .deltas[0].from_version == $from_version and
+  .deltas[0].from_size == $from_size and .deltas[0].from_sha256 == $from_sha and
+  (.deltas[0].patch | keys | sort) == (["filename","sha256","size","url"] | sort) and
+  .deltas[0].patch.filename == $patch_filename and
+  .deltas[0].patch.size == $patch_size and .deltas[0].patch.sha256 == $patch_sha and
+  .deltas[0].patch.url == ($repository + "/releases/download/v" + $target_version + "/" + $patch_filename)
+' "$DIST/xpad2-deltas.json" >/dev/null
+zstd -q -d --patch-from="$delta_base" "$DIST/$delta_filename" -f \
+  -o "$tmp_dir/delta-reconstructed"
+cmp -s "$DIST/$binary_filename" "$tmp_dir/delta-reconstructed" || {
+  printf 'delta did not reconstruct the exact target binary\n' >&2
+  exit 1
+}
+
 update_package="$tmp_dir/xpad2-update"
-[[ "$(find "$update_package" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')" == 5 ]]
+[[ "$(find "$update_package" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')" == 8 ]]
 cmp -s "$DIST/xpad2-update.json" "$update_package/xpad2-update.json"
 cmp -s "$DIST/xpad2-update.json.sig" "$update_package/xpad2-update.json.sig"
 cmp -s "$DIST/catalog.sig" "$update_package/catalog.sig"
+cmp -s "$DIST/xpad2-deltas.json" "$update_package/xpad2-deltas.json"
+cmp -s "$DIST/xpad2-deltas.json.sig" "$update_package/xpad2-deltas.json.sig"
+cmp -s "$DIST/$delta_filename" "$update_package/$delta_filename"
 cmp -s "$DIST/$binary_filename" "$update_package/$binary_filename"
 cmp -s "$DIST/$cache_filename" "$update_package/$cache_filename"
 

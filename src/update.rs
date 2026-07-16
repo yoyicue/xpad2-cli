@@ -15,7 +15,7 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
+use std::io::{BufReader, Read, Write};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -30,10 +30,15 @@ const GITHUB_API_REPOSITORY: &str = "https://api.github.com/repos/yoyicue/xpad2-
 const MANIFEST_FILENAME: &str = "xpad2-update.json";
 const SIGNATURE_FILENAME: &str = "xpad2-update.json.sig";
 const CATALOG_SIGNATURE_FILENAME: &str = "catalog.sig";
+const DELTA_INDEX_FILENAME: &str = "xpad2-deltas.json";
+const DELTA_SIGNATURE_FILENAME: &str = "xpad2-deltas.json.sig";
+const DELTA_SCHEMA: u32 = 1;
+const DELTA_KIND: &str = "xpad2-deltas";
 const MAX_MANIFEST_SIZE: usize = 256 * 1024;
 const MAX_SIGNATURE_SIZE: usize = 64 * 1024;
 const MAX_RELEASE_METADATA_SIZE: usize = 2 * 1024 * 1024;
 const MAX_BINARY_SIZE: u64 = 128 * 1024 * 1024;
+const MAX_DELTA_SIZE: u64 = 64 * 1024 * 1024;
 const MAX_CACHE_ARCHIVE_SIZE: u64 = 512 * 1024 * 1024;
 const MAX_EXTRACTED_SIZE: u64 = 768 * 1024 * 1024;
 const MAX_ZIP_ENTRIES: usize = 4096;
@@ -94,13 +99,33 @@ struct UpdateProfile {
     abi: String,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 struct UpdateAsset {
     filename: String,
     url: String,
     size: u64,
     sha256: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DeltaIndex {
+    schema: u32,
+    kind: String,
+    repository: String,
+    target_version: String,
+    target_binary: UpdateAsset,
+    deltas: Vec<DeltaEntry>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DeltaEntry {
+    from_version: String,
+    from_size: u64,
+    from_sha256: String,
+    patch: UpdateAsset,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -206,6 +231,12 @@ impl CacheSwap {
 struct BinarySwap {
     target: PathBuf,
     backup: PathBuf,
+}
+
+struct CandidateAcquisition {
+    path: PathBuf,
+    mode: &'static str,
+    transferred_bytes: u64,
 }
 
 impl BinarySwap {
@@ -385,14 +416,9 @@ pub fn apply(
     atomic_write(&manifest_path, &verified.raw, 0o600)?;
     atomic_write(&signature_path, &verified.signature, 0o600)?;
 
-    let candidate = acquire_asset(
-        &verified.manifest.binary,
-        verified.offline_root.as_deref(),
-        verified.github_release.as_ref(),
-        &workspace.path,
-        0o700,
-        "xpad2 ELF",
-    )?;
+    let candidate_acquisition =
+        acquire_candidate_binary(&verified, &current, &workspace.path, log)?;
+    let candidate = candidate_acquisition.path;
     validate_elf_arm64(&candidate)?;
     let catalog_signature = acquire_catalog_signature(&verified, &workspace.path)?;
     let (cache_source, target_lock, cache_mode) = if let Some(catalog_signature) = catalog_signature
@@ -494,6 +520,8 @@ pub fn apply(
         "to_version": target.to_string(),
         "catalog_version": verified.manifest.catalog_version,
         "binary_sha256": verified.manifest.binary.sha256,
+        "binary_mode": candidate_acquisition.mode,
+        "binary_transferred_bytes": candidate_acquisition.transferred_bytes,
         "cache_sha256": verified.manifest.cache.sha256,
         "cache_mode": cache_mode,
         "cache_files_removed": cache_files_removed,
@@ -1158,6 +1186,313 @@ fn acquire_catalog_signature(
     Ok(Some(target))
 }
 
+fn acquire_delta_index(
+    verified: &VerifiedManifest,
+    workspace: &Path,
+) -> Result<Option<DeltaIndex>> {
+    let pair = if let Some(root) = &verified.offline_root {
+        let index = root.join(DELTA_INDEX_FILENAME);
+        let signature = root.join(DELTA_SIGNATURE_FILENAME);
+        match (index.exists(), signature.exists()) {
+            (false, false) => None,
+            (true, true) => Some((
+                read_regular_limited(&index, MAX_MANIFEST_SIZE)?,
+                read_regular_limited(&signature, MAX_SIGNATURE_SIZE)?,
+            )),
+            _ => {
+                return Err(msg(
+                    "offline update contains only one delta index/signature sidecar",
+                ));
+            }
+        }
+    } else if let Some(release) = &verified.github_release {
+        let index_asset = github_asset_optional(release, DELTA_INDEX_FILENAME)?;
+        let signature_asset = github_asset_optional(release, DELTA_SIGNATURE_FILENAME)?;
+        match (index_asset, signature_asset) {
+            (None, None) => None,
+            (Some(index_asset), Some(signature_asset)) => {
+                if index_asset.size == 0 || index_asset.size > MAX_MANIFEST_SIZE as u64 {
+                    return Err(msg("GitHub delta index asset has an invalid size"));
+                }
+                if signature_asset.size == 0 || signature_asset.size > MAX_SIGNATURE_SIZE as u64 {
+                    return Err(msg("GitHub delta signature asset has an invalid size"));
+                }
+                let agent = http_agent();
+                Some((
+                    fetch_small_with_accept(
+                        &agent,
+                        &index_asset.url,
+                        MAX_MANIFEST_SIZE,
+                        "delta index",
+                        "application/octet-stream",
+                    )?,
+                    fetch_small_with_accept(
+                        &agent,
+                        &signature_asset.url,
+                        MAX_SIGNATURE_SIZE,
+                        "delta index signature",
+                        "application/octet-stream",
+                    )?,
+                ))
+            }
+            _ => {
+                return Err(msg(
+                    "GitHub release contains only one delta index/signature sidecar",
+                ));
+            }
+        }
+    } else {
+        None
+    };
+    let Some((raw, signature)) = pair else {
+        return Ok(None);
+    };
+    catalog::verify_catalog_signature(&raw, &signature)?;
+    let index: DeltaIndex = serde_json::from_slice(&raw)?;
+    validate_delta_index(&index, &verified.manifest)?;
+    atomic_write(&workspace.join(DELTA_INDEX_FILENAME), &raw, 0o600)?;
+    atomic_write(&workspace.join(DELTA_SIGNATURE_FILENAME), &signature, 0o600)?;
+    Ok(Some(index))
+}
+
+fn validate_delta_index(index: &DeltaIndex, manifest: &UpdateManifest) -> Result<()> {
+    if index.schema != DELTA_SCHEMA
+        || index.kind != DELTA_KIND
+        || index.repository != UPDATE_REPOSITORY
+        || index.target_version != manifest.version
+        || index.target_binary != manifest.binary
+    {
+        return Err(msg(
+            "signed delta index does not match the target update manifest",
+        ));
+    }
+    if index.deltas.is_empty() || index.deltas.len() > 16 {
+        return Err(msg("signed delta index has an invalid entry count"));
+    }
+    let target = parse_canonical_version(&manifest.version)?;
+    let mut versions = BTreeSet::new();
+    for entry in &index.deltas {
+        let from = parse_canonical_version(&entry.from_version)?;
+        if !from.pre.is_empty()
+            || !from.build.is_empty()
+            || from >= target
+            || !versions.insert(entry.from_version.as_str())
+        {
+            return Err(msg(format!(
+                "invalid or duplicate delta base version: {}",
+                entry.from_version
+            )));
+        }
+        if entry.from_size == 0 || entry.from_size > MAX_BINARY_SIZE {
+            return Err(msg(format!(
+                "delta base size is outside the safe range: {}",
+                entry.from_version
+            )));
+        }
+        validate_sha256(&entry.from_sha256, "delta base SHA-256")?;
+        validate_asset(&entry.patch, MAX_DELTA_SIZE, "delta patch")?;
+        let expected_filename = format!(
+            "xpad2-delta-v{}-to-v{}-android-arm64.zst",
+            entry.from_version, manifest.version
+        );
+        let expected_url = format!(
+            "{UPDATE_REPOSITORY}/releases/download/v{}/{}",
+            manifest.version, expected_filename
+        );
+        if entry.patch.filename != expected_filename
+            || entry.patch.url != expected_url
+            || entry.patch.size >= manifest.binary.size
+        {
+            return Err(msg(format!(
+                "delta patch identity is invalid for base {}",
+                entry.from_version
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn acquire_candidate_binary(
+    verified: &VerifiedManifest,
+    current: &Version,
+    workspace: &Path,
+    log: &mut TransactionLog,
+) -> Result<CandidateAcquisition> {
+    let current_version = current.to_string();
+    if let Some(index) = acquire_delta_index(verified, workspace)?
+        && let Some(entry) = index
+            .deltas
+            .iter()
+            .find(|entry| entry.from_version == current_version)
+    {
+        let current_exe = std::env::current_exe()
+            .map_err(|error| msg(format!("cannot resolve current executable: {error}")))?;
+        verify_regular_file(&current_exe)?;
+        let metadata = fs::metadata(&current_exe).at(&current_exe)?;
+        let actual_sha = if metadata.len() == entry.from_size {
+            Some(sha256_file(&current_exe)?)
+        } else {
+            None
+        };
+        if actual_sha.as_deref() == Some(entry.from_sha256.as_str()) {
+            println!(
+                "命中增量更新：{} -> {}，仅下载 {:.1} KiB…",
+                entry.from_version,
+                verified.manifest.version,
+                entry.patch.size as f64 / 1024.0
+            );
+            let delta_result: Result<PathBuf> = (|| {
+                let patch = acquire_asset(
+                    &entry.patch,
+                    verified.offline_root.as_deref(),
+                    verified.github_release.as_ref(),
+                    workspace,
+                    0o600,
+                    "xpad2 delta",
+                )?;
+                let candidate = workspace.join(&verified.manifest.binary.filename);
+                reconstruct_candidate_from_delta(
+                    &current_exe,
+                    &patch,
+                    &candidate,
+                    &verified.manifest.binary,
+                )?;
+                validate_elf_arm64(&candidate)?;
+                Ok(candidate)
+            })();
+            match delta_result {
+                Ok(candidate) => {
+                    log.event(
+                        "self-update",
+                        "delta-reconstructed",
+                        json!({
+                            "from_version": entry.from_version,
+                            "from_sha256": entry.from_sha256,
+                            "patch_filename": entry.patch.filename,
+                            "patch_size": entry.patch.size,
+                            "target_sha256": verified.manifest.binary.sha256,
+                        }),
+                    )?;
+                    return Ok(CandidateAcquisition {
+                        path: candidate,
+                        mode: "delta",
+                        transferred_bytes: entry.patch.size,
+                    });
+                }
+                Err(error) => {
+                    log.event(
+                        "self-update",
+                        "delta-fallback",
+                        json!({
+                            "from_version": entry.from_version,
+                            "error": error.to_string(),
+                        }),
+                    )?;
+                    eprintln!("提示：增量更新失败，安全回退完整 ELF：{error}");
+                }
+            }
+        } else {
+            log.event(
+                "self-update",
+                "delta-base-mismatch",
+                json!({
+                    "from_version": entry.from_version,
+                    "expected_size": entry.from_size,
+                    "actual_size": metadata.len(),
+                    "expected_sha256": entry.from_sha256,
+                    "actual_sha256": actual_sha,
+                }),
+            )?;
+            eprintln!("提示：当前 ELF 不是发布版精确基线，跳过 delta 并下载完整 ELF。");
+        }
+    }
+
+    let candidate = acquire_asset(
+        &verified.manifest.binary,
+        verified.offline_root.as_deref(),
+        verified.github_release.as_ref(),
+        workspace,
+        0o700,
+        "xpad2 ELF",
+    )?;
+    Ok(CandidateAcquisition {
+        path: candidate,
+        mode: "full",
+        transferred_bytes: verified.manifest.binary.size,
+    })
+}
+
+fn reconstruct_candidate_from_delta(
+    base: &Path,
+    patch: &Path,
+    target: &Path,
+    identity: &UpdateAsset,
+) -> Result<()> {
+    verify_regular_file(base)?;
+    verify_regular_file(patch)?;
+    if target.exists() {
+        return Err(msg(format!(
+            "delta reconstruction target already exists: {}",
+            target.display()
+        )));
+    }
+    let dictionary = read_limited(base, MAX_BINARY_SIZE as usize)?;
+    let patch_file = BufReader::new(File::open(patch).at(patch)?);
+    let mut decoder = zstd::stream::read::Decoder::with_dictionary(patch_file, &dictionary)
+        .map_err(|error| msg(format!("cannot initialize zstd delta decoder: {error}")))?;
+    let parent = target
+        .parent()
+        .ok_or_else(|| msg("delta reconstruction target has no parent"))?;
+    fs::create_dir_all(parent).at(parent)?;
+    let partial = parent.join(format!(".{}.delta.partial", identity.filename));
+    if fs::symlink_metadata(&partial).is_ok() {
+        fs::remove_file(&partial).at(&partial)?;
+    }
+    let result = (|| {
+        let mut output = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .mode(0o600)
+            .open(&partial)
+            .at(&partial)?;
+        let mut hasher = Sha256::new();
+        let mut total = 0u64;
+        let mut buffer = [0u8; 128 * 1024];
+        loop {
+            let count = decoder
+                .read(&mut buffer)
+                .map_err(|error| msg(format!("zstd delta decode failed: {error}")))?;
+            if count == 0 {
+                break;
+            }
+            total = total
+                .checked_add(count as u64)
+                .ok_or_else(|| msg("delta output size overflow"))?;
+            if total > identity.size {
+                return Err(msg("delta output exceeds signed target size"));
+            }
+            output.write_all(&buffer[..count]).at(&partial)?;
+            hasher.update(&buffer[..count]);
+        }
+        output.sync_all().at(&partial)?;
+        let digest = format!("{:x}", hasher.finalize());
+        if total != identity.size || digest != identity.sha256 {
+            return Err(msg(format!(
+                "delta output identity mismatch: size {total}/{} sha256 {digest}/{}",
+                identity.size, identity.sha256
+            )));
+        }
+        fs::set_permissions(&partial, fs::Permissions::from_mode(0o700)).at(&partial)?;
+        fs::rename(&partial, target).at(target)?;
+        sync_parent(target)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&partial);
+        let _ = fs::remove_file(target);
+    }
+    result
+}
+
 fn acquire_asset(
     asset: &UpdateAsset,
     offline_root: Option<&Path>,
@@ -1183,6 +1518,17 @@ fn acquire_asset(
         );
         let (url, accept) = if let Some(release) = github_release {
             let transport = github_asset(release, &asset.filename)?;
+            if transport.size != asset.size
+                || transport
+                    .digest
+                    .as_ref()
+                    .is_some_and(|digest| digest != &format!("sha256:{}", asset.sha256))
+            {
+                return Err(msg(format!(
+                    "GitHub asset identity does not match signed metadata: {}",
+                    asset.filename
+                )));
+            }
             (transport.url.as_str(), Some("application/octet-stream"))
         } else {
             (asset.url.as_str(), None)
@@ -1921,6 +2267,99 @@ mod tests {
     #[test]
     fn strict_manifest_accepts_the_release_shape() {
         validate_manifest(&manifest()).unwrap();
+    }
+
+    fn delta_index_for(manifest: &UpdateManifest) -> DeltaIndex {
+        let from_version = "0.1.9";
+        let filename = format!(
+            "xpad2-delta-v{from_version}-to-v{}-android-arm64.zst",
+            manifest.version
+        );
+        DeltaIndex {
+            schema: DELTA_SCHEMA,
+            kind: DELTA_KIND.to_string(),
+            repository: UPDATE_REPOSITORY.to_string(),
+            target_version: manifest.version.clone(),
+            target_binary: manifest.binary.clone(),
+            deltas: vec![DeltaEntry {
+                from_version: from_version.to_string(),
+                from_size: 900,
+                from_sha256: "d".repeat(64),
+                patch: UpdateAsset {
+                    filename: filename.clone(),
+                    url: format!(
+                        "{UPDATE_REPOSITORY}/releases/download/v{}/{filename}",
+                        manifest.version
+                    ),
+                    size: 100,
+                    sha256: "e".repeat(64),
+                },
+            }],
+        }
+    }
+
+    #[test]
+    fn signed_delta_index_is_strictly_bound_to_target_and_base() {
+        let mut manifest = manifest();
+        manifest.binary.size = 1024;
+        let index = delta_index_for(&manifest);
+        validate_delta_index(&index, &manifest).unwrap();
+
+        let mut wrong_target = delta_index_for(&manifest);
+        wrong_target.target_binary.sha256 = "f".repeat(64);
+        assert!(validate_delta_index(&wrong_target, &manifest).is_err());
+
+        let mut duplicate = delta_index_for(&manifest);
+        duplicate.deltas.push(DeltaEntry {
+            from_version: duplicate.deltas[0].from_version.clone(),
+            from_size: duplicate.deltas[0].from_size,
+            from_sha256: duplicate.deltas[0].from_sha256.clone(),
+            patch: duplicate.deltas[0].patch.clone(),
+        });
+        assert!(validate_delta_index(&duplicate, &manifest).is_err());
+
+        let mut wrong_transport = delta_index_for(&manifest);
+        wrong_transport.deltas[0].patch.url = "https://example.invalid/delta.zst".to_string();
+        assert!(validate_delta_index(&wrong_transport, &manifest).is_err());
+    }
+
+    #[test]
+    fn zstd_delta_reconstruction_is_bounded_and_exact() {
+        let root = test_dir("delta-reconstruct");
+        fs::create_dir_all(&root).unwrap();
+        let base = (0..512 * 1024)
+            .map(|index| (index % 251) as u8)
+            .collect::<Vec<_>>();
+        let mut target_bytes = base.clone();
+        target_bytes[1000..2000].fill(0x5a);
+        target_bytes.extend_from_slice(b"new signed tail");
+        let mut encoder = zstd::stream::Encoder::with_dictionary(Vec::new(), 3, &base).unwrap();
+        encoder.write_all(&target_bytes).unwrap();
+        let patch_bytes = encoder.finish().unwrap();
+        let base_path = root.join("base");
+        let patch_path = root.join("patch.zst");
+        fs::write(&base_path, &base).unwrap();
+        fs::write(&patch_path, patch_bytes).unwrap();
+        let identity = UpdateAsset {
+            filename: "candidate".to_string(),
+            url: "https://example.invalid/candidate".to_string(),
+            size: target_bytes.len() as u64,
+            sha256: sha256_bytes(&target_bytes),
+        };
+        let target = root.join("candidate");
+        reconstruct_candidate_from_delta(&base_path, &patch_path, &target, &identity).unwrap();
+        assert_eq!(fs::read(&target).unwrap(), target_bytes);
+
+        fs::remove_file(&target).unwrap();
+        let mut undersized = identity;
+        undersized.size -= 1;
+        assert!(
+            reconstruct_candidate_from_delta(&base_path, &patch_path, &target, &undersized)
+                .is_err()
+        );
+        assert!(!target.exists());
+        assert!(!root.join(".candidate.delta.partial").exists());
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

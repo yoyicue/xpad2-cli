@@ -16,8 +16,28 @@ BINARY="$ROOT/target/aarch64-linux-android/release/xpad2"
 UPDATE_MANIFEST="$DIST/xpad2-update.json"
 UPDATE_SIGNATURE="$DIST/xpad2-update.json.sig"
 CATALOG_SIGNATURE="$DIST/catalog.sig"
+DELTA_INDEX="$DIST/xpad2-deltas.json"
+DELTA_SIGNATURE="$DIST/xpad2-deltas.json.sig"
 UPDATE_BUNDLE="$DIST/xpad2-update-v$VERSION.zip"
 REPOSITORY="https://github.com/yoyicue/xpad2-cli"
+
+DELTA_BASE_VERSION=${XPAD2_DELTA_BASE_VERSION:-}
+if [[ -z "$DELTA_BASE_VERSION" ]]; then
+  while IFS= read -r tag; do
+    candidate=${tag#v}
+    if [[ "$candidate" != "$VERSION" ]]; then
+      DELTA_BASE_VERSION=$candidate
+      break
+    fi
+  done < <(git -C "$ROOT" tag --list 'v[0-9]*' --sort=-v:refname)
+fi
+[[ "$DELTA_BASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+  printf 'cannot determine a stable delta base version\n' >&2
+  exit 1
+}
+DELTA_BASE_BINARY=${XPAD2_DELTA_BASE_BINARY:-$DIST/xpad2-v$DELTA_BASE_VERSION-android-arm64}
+DELTA_FILENAME="xpad2-delta-v$DELTA_BASE_VERSION-to-v$VERSION-android-arm64.zst"
+DELTA_PATH="$DIST/$DELTA_FILENAME"
 
 sha256_file() {
   shasum -a 256 "$1" | awk '{print $1}'
@@ -50,6 +70,14 @@ source_for() {
 
 command -v jq >/dev/null || {
   printf 'jq is required\n' >&2
+  exit 1
+}
+command -v zstd >/dev/null || {
+  printf 'zstd is required\n' >&2
+  exit 1
+}
+[[ -f "$DELTA_BASE_BINARY" ]] || {
+  printf 'delta base binary missing: %s\n' "$DELTA_BASE_BINARY" >&2
   exit 1
 }
 MANAGER_FILES=()
@@ -117,7 +145,8 @@ done < <(jq -r '.artifacts[] | select(.embedded == true) | [.id,.filename,.sha25
 rm -f "$DIST/xpad2-v$VERSION-android-arm64" \
   "$DIST/xpad2-v$VERSION-android-arm64.zip" \
   "$DIST/xpad2-cache-v$VERSION.zip" \
-  "$UPDATE_MANIFEST" "$UPDATE_SIGNATURE" "$CATALOG_SIGNATURE" "$UPDATE_BUNDLE" \
+  "$UPDATE_MANIFEST" "$UPDATE_SIGNATURE" "$CATALOG_SIGNATURE" \
+  "$DELTA_INDEX" "$DELTA_SIGNATURE" "$DELTA_PATH" "$UPDATE_BUNDLE" \
   "$DIST/SHA256SUMS"
 for manager_filename in "${MANAGER_FILES[@]}"; do
   rm -f "$DIST/$manager_filename"
@@ -196,14 +225,61 @@ jq -n \
 chmod 644 "$UPDATE_MANIFEST"
 "$ROOT/tools/sign_catalog.sh" "$UPDATE_MANIFEST" "$UPDATE_SIGNATURE"
 
+DELTA_BASE_SIZE=$(wc -c < "$DELTA_BASE_BINARY" | tr -d ' ')
+DELTA_BASE_SHA=$(sha256_file "$DELTA_BASE_BINARY")
+zstd --patch-from="$DELTA_BASE_BINARY" "$DIST/$BINARY_FILENAME" -19 -q -f \
+  -o "$DELTA_PATH"
+chmod 644 "$DELTA_PATH"
+DELTA_SIZE=$(wc -c < "$DELTA_PATH" | tr -d ' ')
+DELTA_SHA=$(sha256_file "$DELTA_PATH")
+((DELTA_SIZE < BINARY_SIZE)) || {
+  printf 'delta is not smaller than the target binary\n' >&2
+  exit 1
+}
+jq -n \
+  --arg repository "$REPOSITORY" \
+  --arg target_version "$VERSION" \
+  --argjson target_binary "$(jq -c '.binary' "$UPDATE_MANIFEST")" \
+  --arg from_version "$DELTA_BASE_VERSION" \
+  --argjson from_size "$DELTA_BASE_SIZE" \
+  --arg from_sha "$DELTA_BASE_SHA" \
+  --arg patch_filename "$DELTA_FILENAME" \
+  --arg patch_url "$REPOSITORY/releases/download/v$VERSION/$DELTA_FILENAME" \
+  --argjson patch_size "$DELTA_SIZE" \
+  --arg patch_sha "$DELTA_SHA" \
+  '{
+    schema: 1,
+    kind: "xpad2-deltas",
+    repository: $repository,
+    target_version: $target_version,
+    target_binary: $target_binary,
+    deltas: [{
+      from_version: $from_version,
+      from_size: $from_size,
+      from_sha256: $from_sha,
+      patch: {
+        filename: $patch_filename,
+        url: $patch_url,
+        size: $patch_size,
+        sha256: $patch_sha
+      }
+    }]
+  }' > "$DELTA_INDEX"
+chmod 644 "$DELTA_INDEX"
+"$ROOT/tools/sign_catalog.sh" "$DELTA_INDEX" "$DELTA_SIGNATURE"
+
 rm -rf "$UPDATE_PACKAGE"
 mkdir -p "$UPDATE_PACKAGE"
 cp "$UPDATE_MANIFEST" "$UPDATE_SIGNATURE" "$CATALOG_SIGNATURE" "$DIST/$BINARY_FILENAME" \
-  "$DIST/$CACHE_FILENAME" "$UPDATE_PACKAGE/"
+  "$DIST/$CACHE_FILENAME" "$DELTA_INDEX" "$DELTA_SIGNATURE" "$DELTA_PATH" \
+  "$UPDATE_PACKAGE/"
 chmod 755 "$UPDATE_PACKAGE/$BINARY_FILENAME"
 chmod 644 "$UPDATE_PACKAGE/xpad2-update.json" \
   "$UPDATE_PACKAGE/xpad2-update.json.sig" \
   "$UPDATE_PACKAGE/catalog.sig" \
+  "$UPDATE_PACKAGE/xpad2-deltas.json" \
+  "$UPDATE_PACKAGE/xpad2-deltas.json.sig" \
+  "$UPDATE_PACKAGE/$DELTA_FILENAME" \
   "$UPDATE_PACKAGE/$CACHE_FILENAME"
 (
   cd "$STAGE"
@@ -219,6 +295,7 @@ chmod 644 "$UPDATE_PACKAGE/xpad2-update.json" \
     "${MANAGER_FILES[@]}" \
     assets.lock.json sources.lock.json \
     xpad2-update.json xpad2-update.json.sig catalog.sig \
+    xpad2-deltas.json xpad2-deltas.json.sig "$DELTA_FILENAME" \
     "xpad2-update-v$VERSION.zip" > SHA256SUMS
 )
 rm -rf "$STAGE"

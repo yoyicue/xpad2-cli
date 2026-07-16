@@ -50,7 +50,10 @@ while IFS=$'\t' read -r name version license manifest; do
     \( -iname 'license*' -o -iname 'copying*' -o -iname 'notice*' \) \
     -print0 | sort -z)
 
-  if ((copied == 0)) && [[ "$license" == "Apache-2.0" && -f "$APACHE_FALLBACK" ]]; then
+  # Some crates publish a valid SPDX choice but omit license text from the
+  # crates.io archive. Select Apache-2.0 when the expression explicitly
+  # permits it, and ship the canonical text supplied by the release tree.
+  if ((copied == 0)) && [[ "$license" == *"Apache-2.0"* && -f "$APACHE_FALLBACK" ]]; then
     cp "$APACHE_FALLBACK" "$crate_dest/LICENSE-APACHE-2.0"
     copied=1
   fi
