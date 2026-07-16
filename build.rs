@@ -50,7 +50,7 @@ fn candidate_paths(manifest: &Path, artifact_dir: Option<&Path>, a: &Artifact) -
         ),
         "xpad-installer" => Some(parent.join("xpad-installer/dist/xpad-install")),
         "boominstaller" => Some(
-            parent.join("BoomInstaller/out/apk/BoomInstaller-v13.6.0.r14.7719432-production.apk"),
+            parent.join("BoomInstaller/out/apk/BoomInstaller-v13.6.0.r15.889f53c-production.apk"),
         ),
         _ => None,
     };

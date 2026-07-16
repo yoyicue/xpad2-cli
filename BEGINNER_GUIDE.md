@@ -49,30 +49,30 @@ adb -s 你的设备序列号
 ## 3. 下载并校验 xpad2
 
 当前正式版本是
-[`v0.4.8`](https://github.com/yoyicue/xpad2-cli/releases/tag/v0.4.8)。只需要下载：
+[`v0.4.9`](https://github.com/yoyicue/xpad2-cli/releases/tag/v0.4.9)。只需要下载：
 
 ```text
-xpad2-v0.4.8-android-arm64
+xpad2-v0.4.9-android-arm64
 ```
 
 macOS 或 Linux 可以直接执行：
 
 ```sh
-curl -fLO https://github.com/yoyicue/xpad2-cli/releases/download/v0.4.8/xpad2-v0.4.8-android-arm64
-shasum -a 256 xpad2-v0.4.8-android-arm64
+curl -fLO https://github.com/yoyicue/xpad2-cli/releases/download/v0.4.9/xpad2-v0.4.9-android-arm64
+shasum -a 256 xpad2-v0.4.9-android-arm64
 ```
 
 Windows PowerShell 可以执行：
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/yoyicue/xpad2-cli/releases/download/v0.4.8/xpad2-v0.4.8-android-arm64" -OutFile "xpad2-v0.4.8-android-arm64"
-Get-FileHash .\xpad2-v0.4.8-android-arm64 -Algorithm SHA256
+Invoke-WebRequest -Uri "https://github.com/yoyicue/xpad2-cli/releases/download/v0.4.9/xpad2-v0.4.9-android-arm64" -OutFile "xpad2-v0.4.9-android-arm64"
+Get-FileHash .\xpad2-v0.4.9-android-arm64 -Algorithm SHA256
 ```
 
 正确的 SHA-256 是：
 
 ```text
-03101378085c02d59d9b7551f915fef48bd4fff2c174ee5f899ddabdc3f7259c
+980ba609a33996cebb1c188964a0f02fbc218b1246489799c2cbb94a824c765d
 ```
 
 哈希不一致时不要继续，重新下载文件。
@@ -82,7 +82,7 @@ Get-FileHash .\xpad2-v0.4.8-android-arm64 -Algorithm SHA256
 在下载文件所在目录执行：
 
 ```sh
-adb push xpad2-v0.4.8-android-arm64 /data/local/tmp/xpad2
+adb push xpad2-v0.4.9-android-arm64 /data/local/tmp/xpad2
 adb shell chmod 700 /data/local/tmp/xpad2
 adb shell /data/local/tmp/xpad2 version
 ```
@@ -90,7 +90,7 @@ adb shell /data/local/tmp/xpad2 version
 最后一条命令应显示：
 
 ```text
-xpad2 0.4.8 (catalog 2026-07-16.9)
+xpad2 0.4.9 (catalog 2026-07-16.10)
 ```
 
 这就表示 `xpad2` 已经安装到了：
@@ -295,7 +295,7 @@ adb shell /data/local/tmp/xpad2 update --offline /data/local/tmp/xpad2-update-vX
 adb shell rm /data/local/tmp/xpad2-update-vX.Y.Z.zip
 ```
 
-如果当前仍是 v0.1.x，需要先按第 3–4 节手工覆盖到当前 v0.4.8 一次；旧版本没有
+如果当前仍是 v0.1.x，需要先按第 3–4 节手工覆盖到当前 v0.4.9 一次；旧版本没有
 自更新命令。
 
 ## 常见问题

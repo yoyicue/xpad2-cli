@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "product_version": "0.4.8",
-  "catalog_version": "2026-07-16.9",
+  "product_version": "0.4.9",
+  "catalog_version": "2026-07-16.10",
   "profile": {
     "build_fingerprint": "alps/vnd_ls12_mt8797_wifi_64/ls12_mt8797_wifi_64:13/TP1A.220624.014/260:user/release-keys",
     "kernel_release_prefix": "4.19.191",
@@ -152,9 +152,9 @@
       "id": "xpad-installer",
       "filename": "xpad-install",
       "kind": "cli",
-      "version": "0.2.4",
-      "size": 88856,
-      "sha256": "014b8095f637e3a70b16ac6bca9a6f596bc239d62167a4508d50d136014410c5",
+      "version": "0.2.5",
+      "size": 89072,
+      "sha256": "cd21bb7b4df089361e45b72096e11aa639ec57675e6012097341dfc14ee9f388",
       "embedded": true,
       "mode": 448,
       "target": "/data/local/tmp/xpad-install",
@@ -164,16 +164,16 @@
     },
     {
       "id": "boominstaller",
-      "filename": "BoomInstaller-v13.6.0.r14.7719432-production.apk",
+      "filename": "BoomInstaller-v13.6.0.r15.889f53c-production.apk",
       "kind": "apk",
-      "version": "13.6.0.r14.7719432",
+      "version": "13.6.0.r15.889f53c",
       "size": 3322162,
-      "sha256": "1b9d401841da7c8db389569e57078ee67b4e12a8d8fbacd2b097352087a55f7a",
+      "sha256": "72ff17f48cab99f6ff51c072e3363952de379347e07da242ce2150327802f200",
       "embedded": true,
       "mode": 384,
       "target": null,
       "package": "com.yoyicue.boominstaller",
-      "version_code": 14,
+      "version_code": 15,
       "cert_sha256": "3cb5b69579d23197ced8100818a85a46b821383a504b394a44cfe3e98ade78a2"
     }
   ]
