@@ -7,6 +7,7 @@ mod install;
 mod logging;
 mod model;
 mod ota;
+mod profile;
 mod root;
 mod transaction;
 mod update;
@@ -114,12 +115,21 @@ fn command_status(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<(
         println!("{}", serde_json::to_string_pretty(&status)?);
     } else {
         println!(
-            "xpad2 {}  /260支持={}  SELinux={}",
+            "xpad2 {}  指纹/19–/260支持={}  SELinux={}",
             status.product_version,
             yes_no(status.supported),
             status.selinux
         );
         println!("boot-id: {}", status.boot_id);
+        println!(
+            "profile: fingerprint_incremental={} kernel={} kernel_build={}",
+            status
+                .fingerprint_incremental
+                .map(|value| format!("/{value}"))
+                .unwrap_or_else(|| "unparsed".to_string()),
+            status.kernel_release,
+            status.kernel_version
+        );
         render_component(&status.temporary_root);
         for component in &status.components {
             render_component(component);
@@ -135,7 +145,7 @@ fn command_status(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<(
 }
 
 fn command_list(catalog: &Catalog) {
-    println!("ota              policy   freeze /260 system OTA package for user 0");
+    println!("ota              policy   freeze supported XPad2 system OTA package for user 0");
     println!("ksu              runtime  KernelSU 32547 / UAPI 2 / current boot");
     println!("suu              runtime  SukiSU Ultra 40796 / current boot");
     println!("installer-backup policy   managed 0044 device-OEM fallback installer");
@@ -208,7 +218,7 @@ fn command_info(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<()>
 fn command_doctor(catalog: &Catalog, paths: &Paths) -> Result<()> {
     let snapshot = device::snapshot(catalog, paths);
     println!(
-        "[{}] firmware /260",
+        "[{}] firmware fingerprint incremental /19–/260",
         if snapshot.supported { "OK" } else { "FAIL" }
     );
     println!(
@@ -237,7 +247,9 @@ fn command_doctor(catalog: &Catalog, paths: &Paths) -> Result<()> {
         println!("[INFO] cache empty; locked embedded artifacts are available");
     }
     if !snapshot.supported {
-        return Err(msg("device is not the exact supported /260 profile"));
+        return Err(msg(
+            "device is not in the supported XPad2 fingerprint /19–/260 profile",
+        ));
     }
     if let Some(component) = snapshot
         .components
@@ -642,7 +654,7 @@ fn yes_no(value: bool) -> &'static str {
 
 fn print_help() {
     println!(
-        "xpad2 {} - XPad2 /260 root-capable signed installer\n\n\
+        "xpad2 {} - XPad2 fingerprint /19–/260 root-capable signed installer\n\n\
 Usage:\n  xpad2 status [--json]\n  xpad2 doctor\n  xpad2 list | info COMPONENT\n  xpad2 update [--check] [--version VERSION] [--offline DIRECTORY_OR_ZIP]\n  xpad2 root [-- COMMAND ARG...]\n  xpad2 freeze ota | unfreeze ota\n  xpad2 install [COMPONENT...]             # default: full (KSU)\n  xpad2 install cli FILE [--name NAME]\n  xpad2 install apk FILE\n  xpad2 verify [COMPONENT]\n  xpad2 repair COMPONENT\n  xpad2 cleanup\n  xpad2 logs export DIRECTORY\n  xpad2 cache path|list|verify|import DIRECTORY|prune|clear\n\n\
 Built-ins: ota, ksu, suu, ksu-manager, suu-manager, xpad-installer, installer-backup, boominstaller, full, suu-full\n\
 Global: --cache-dir DIRECTORY (or XPAD2_CACHE_DIR)\n\n\

@@ -67,7 +67,7 @@ jq -e \
   --argjson cache_size "$cache_size" \
   --arg catalog_sha "$catalog_sha" \
   --argjson catalog_size "$catalog_size" \
-  --argjson profile "$(jq -c '.profile' "$ROOT/assets.lock.json")" '
+  --argjson profile "$(jq -c '.profile | {build_fingerprint,kernel_release_prefix,abi}' "$ROOT/assets.lock.json")" '
   (keys | sort) == (["binary","cache","catalog","catalog_version","channel","kind","profile","release_url","repository","schema","version"] | sort) and
   .schema == 1 and .kind == "xpad2-update" and .channel == "stable" and
   .repository == "https://github.com/yoyicue/xpad2-cli" and

@@ -60,6 +60,13 @@ impl Catalog {
                 env!("CARGO_PKG_VERSION")
             )));
         }
+        lock.profile.fingerprint_policy().validate()?;
+        if lock.profile.kernel_release_prefix.is_empty()
+            || lock.profile.kernel_version.is_empty()
+            || lock.profile.abi != "arm64-v8a"
+        {
+            return Err(msg("embedded catalog has an incomplete device profile"));
+        }
         let mut seen = BTreeSet::new();
         for artifact in lock.artifacts.iter().filter(|a| a.embedded) {
             if !seen.insert(artifact.id.as_str()) {
@@ -714,7 +721,12 @@ mod tests {
             catalog_version: "test".to_string(),
             profile: DeviceProfile {
                 build_fingerprint: "fp".to_string(),
+                build_fingerprint_prefix: String::new(),
+                build_fingerprint_suffix: String::new(),
+                fingerprint_incremental_min: 0,
+                fingerprint_incremental_max: 0,
                 kernel_release_prefix: "kernel".to_string(),
+                kernel_version: String::new(),
                 abi: "arm64-v8a".to_string(),
             },
             artifacts: vec![artifact],

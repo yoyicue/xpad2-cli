@@ -177,7 +177,12 @@ CACHE_SHA=$(sha256_file "$DIST/$CACHE_FILENAME")
 CATALOG_SIZE=$(wc -c < "$ROOT/assets.lock.json" | tr -d ' ')
 CATALOG_SHA=$(sha256_file "$ROOT/assets.lock.json")
 CATALOG_VERSION=$(jq -r '.catalog_version' "$ROOT/assets.lock.json")
-PROFILE=$(jq -c '.profile' "$ROOT/assets.lock.json")
+# Keep the network update manifest readable by pre-range v0.4.14 updaters.
+# The complete signed range policy lives in catalog.json/catalog.sig and is
+# independently checked by the candidate; /260 remains the compatibility
+# anchor used by the legacy manifest schema.
+PROFILE=$(jq -c '.profile | {build_fingerprint,kernel_release_prefix,abi}' \
+  "$ROOT/assets.lock.json")
 
 jq -n \
   --arg repository "$REPOSITORY" \

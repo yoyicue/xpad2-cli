@@ -4,8 +4,8 @@ use crate::error::{IoContext, Result, msg};
 use crate::model::{Artifact, ComponentState, ComponentStatus, DeviceStatus};
 use crate::ota;
 use crate::util::{
-    Paths, boot_id, executable_exists, getprop, kernel_release, output_text, run, selinux,
-    sha256_file, validate_elf_arm64,
+    Paths, boot_id, executable_exists, getprop, kernel_release, kernel_version, output_text, run,
+    selinux, sha256_file, validate_elf_arm64,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -618,8 +618,13 @@ pub fn installed_apk_path(package: &str) -> crate::error::Result<Option<PathBuf>
 pub fn snapshot(catalog: &Catalog, paths: &Paths) -> DeviceStatus {
     let fingerprint = getprop("ro.build.fingerprint");
     let kernel = kernel_release();
-    let supported = fingerprint == catalog.lock.profile.build_fingerprint
-        && kernel.starts_with(&catalog.lock.profile.kernel_release_prefix);
+    let version = kernel_version();
+    let abi = getprop("ro.product.cpu.abi");
+    let fingerprint_policy = catalog.lock.profile.fingerprint_policy();
+    let supported = catalog
+        .lock
+        .profile
+        .matches_runtime(&fingerprint, &kernel, &version, &abi);
     let mut components = Vec::new();
     components.push(ota::status());
     components.push(ksu_status(paths));
@@ -651,8 +656,10 @@ pub fn snapshot(catalog: &Catalog, paths: &Paths) -> DeviceStatus {
     DeviceStatus {
         product_version: env!("CARGO_PKG_VERSION").to_string(),
         supported,
+        fingerprint_incremental: fingerprint_policy.incremental(&fingerprint),
         fingerprint,
         kernel_release: kernel,
+        kernel_version: version,
         boot_id: boot_id(),
         selinux: selinux(),
         temporary_root: root_status(),
@@ -665,16 +672,35 @@ pub fn snapshot(catalog: &Catalog, paths: &Paths) -> DeviceStatus {
 pub fn profile_check(catalog: &Catalog) -> crate::error::Result<()> {
     let fingerprint = getprop("ro.build.fingerprint");
     let kernel = kernel_release();
-    if fingerprint != catalog.lock.profile.build_fingerprint {
+    let version = kernel_version();
+    let abi = getprop("ro.product.cpu.abi");
+    let policy = catalog.lock.profile.fingerprint_policy();
+    policy.validate()?;
+    if !policy.matches(&fingerprint) {
         return Err(crate::error::msg(format!(
-            "unsupported firmware: expected /260 fingerprint {}, got {}",
-            catalog.lock.profile.build_fingerprint, fingerprint
+            "unsupported firmware fingerprint: expected {}, got {}",
+            policy.expectation(),
+            fingerprint
         )));
     }
     if !kernel.starts_with(&catalog.lock.profile.kernel_release_prefix) {
         return Err(crate::error::msg(format!(
             "unsupported kernel: expected {}*, got {}",
             catalog.lock.profile.kernel_release_prefix, kernel
+        )));
+    }
+    if !catalog.lock.profile.kernel_version.is_empty()
+        && version != catalog.lock.profile.kernel_version
+    {
+        return Err(crate::error::msg(format!(
+            "unsupported kernel build: expected {:?}, got {:?}",
+            catalog.lock.profile.kernel_version, version
+        )));
+    }
+    if abi != catalog.lock.profile.abi {
+        return Err(crate::error::msg(format!(
+            "unsupported ABI: expected {}, got {}",
+            catalog.lock.profile.abi, abi
         )));
     }
     Ok(())

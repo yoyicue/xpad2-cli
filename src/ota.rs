@@ -126,7 +126,7 @@ fn inspect_package(package: &'static str) -> Result<PackageState> {
     let path_text = output_text(&path);
     if !path.status.success() || !path_text.lines().any(|line| line.starts_with("package:")) {
         return Err(msg(format!(
-            "required /260 OTA package is missing: {package}"
+            "required XPad2 OTA package is missing: {package}"
         )));
     }
 

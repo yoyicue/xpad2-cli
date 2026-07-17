@@ -336,6 +336,13 @@ pub fn kernel_release() -> String {
         .unwrap_or_default()
 }
 
+pub fn kernel_version() -> String {
+    run("/system/bin/uname", &["-v"])
+        .or_else(|_| run("uname", &["-v"]))
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_default()
+}
+
 pub fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }

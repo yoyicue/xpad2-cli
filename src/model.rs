@@ -10,9 +10,23 @@ pub struct AssetsLock {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct DeviceProfile {
+    // Compatibility anchor consumed by pre-range updaters. It remains the
+    // exact upper-bound /260 fingerprint even when the signed catalog also
+    // carries the canonical incremental range below.
     pub build_fingerprint: String,
+    #[serde(default)]
+    pub build_fingerprint_prefix: String,
+    #[serde(default)]
+    pub build_fingerprint_suffix: String,
+    #[serde(default)]
+    pub fingerprint_incremental_min: u32,
+    #[serde(default)]
+    pub fingerprint_incremental_max: u32,
     pub kernel_release_prefix: String,
+    #[serde(default)]
+    pub kernel_version: String,
     pub abi: String,
 }
 
@@ -83,7 +97,9 @@ pub struct DeviceStatus {
     pub product_version: String,
     pub supported: bool,
     pub fingerprint: String,
+    pub fingerprint_incremental: Option<u32>,
     pub kernel_release: String,
+    pub kernel_version: String,
     pub boot_id: String,
     pub selinux: String,
     pub temporary_root: ComponentStatus,

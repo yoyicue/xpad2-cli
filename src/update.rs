@@ -6,11 +6,11 @@ use crate::model::AssetsLock;
 #[cfg(test)]
 use crate::model::DeviceProfile;
 use crate::util::{
-    Paths, atomic_write, copy_atomic, getprop, kernel_release, safe_filename, sha256_bytes,
-    sha256_file, unique_id, validate_elf_arm64,
+    Paths, atomic_write, copy_atomic, getprop, kernel_release, kernel_version, safe_filename,
+    sha256_bytes, sha256_file, unique_id, validate_elf_arm64,
 };
 use semver::Version;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
@@ -92,7 +92,7 @@ struct UpdateManifest {
     release_url: String,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct UpdateProfile {
     build_fingerprint: String,
@@ -606,6 +606,7 @@ fn verify_candidate_identity(
             "candidate embedded release identity does not match update manifest",
         ));
     }
+    catalog.lock.profile.fingerprint_policy().validate()?;
     device::profile_check(catalog)?;
     let current_exe = std::env::current_exe()
         .map_err(|error| msg(format!("cannot resolve candidate executable: {error}")))?;
@@ -963,13 +964,13 @@ fn validate_target_profile(manifest: &UpdateManifest, catalog: &Catalog) -> Resu
     {
         return Err(msg("update release targets a different device profile"));
     }
+    let fingerprint_policy = profile.fingerprint_policy();
+    fingerprint_policy.validate()?;
     let fingerprint = getprop("ro.build.fingerprint");
     let abi = getprop("ro.product.cpu.abi");
     let kernel = kernel_release();
-    if fingerprint != manifest.profile.build_fingerprint
-        || abi != manifest.profile.abi
-        || !kernel.starts_with(&manifest.profile.kernel_release_prefix)
-    {
+    let version = kernel_version();
+    if !profile.matches_runtime(&fingerprint, &kernel, &version, &abi) {
         return Err(msg(
             "current device does not match the signed update profile",
         ));
@@ -1876,6 +1877,7 @@ fn load_cache_catalog_against_manifest(
         return Err(msg("cache catalog identity does not match update manifest"));
     }
     let lock = catalog::load_signed_external_catalog(cache)?;
+    lock.profile.fingerprint_policy().validate()?;
     if lock.schema != 1
         || lock.product_version != manifest.version
         || lock.catalog_version != manifest.catalog_version
@@ -2576,10 +2578,15 @@ mod tests {
     }
 
     #[test]
-    fn catalog_profile_conversion_is_lossless() {
+    fn catalog_profile_projection_stays_legacy_updater_compatible() {
         let source = DeviceProfile {
-            build_fingerprint: "fp".to_string(),
+            build_fingerprint: "prefix/260:suffix".to_string(),
+            build_fingerprint_prefix: "prefix/".to_string(),
+            build_fingerprint_suffix: ":suffix".to_string(),
+            fingerprint_incremental_min: 19,
+            fingerprint_incremental_max: 260,
             kernel_release_prefix: "4.19".to_string(),
+            kernel_version: "exact kernel build".to_string(),
             abi: "arm64-v8a".to_string(),
         };
         let converted = profile_from_catalog(&source);
@@ -2589,6 +2596,16 @@ mod tests {
             source.kernel_release_prefix
         );
         assert_eq!(converted.abi, source.abi);
+        assert_eq!(
+            serde_json::to_value(&converted)
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(String::as_str)
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from(["abi", "build_fingerprint", "kernel_release_prefix"])
+        );
     }
 
     #[test]
