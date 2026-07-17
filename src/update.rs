@@ -14,6 +14,7 @@ use serde::Deserialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
+use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, Read, Write};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
@@ -231,6 +232,8 @@ impl CacheSwap {
 struct BinarySwap {
     target: PathBuf,
     backup: PathBuf,
+    rollback_staged: PathBuf,
+    expected_sha256: String,
 }
 
 struct CandidateAcquisition {
@@ -241,8 +244,34 @@ struct CandidateAcquisition {
 
 impl BinarySwap {
     fn rollback(&self) -> Result<()> {
-        copy_atomic(&self.backup, &self.target, 0o700)?;
-        sync_parent(&self.target)
+        if self.rollback_staged.exists() {
+            if let Err(rename_error) = fs::rename(&self.rollback_staged, &self.target) {
+                copy_atomic(&self.backup, &self.target, 0o700).map_err(|copy_error| {
+                    msg(format!(
+                        "atomic rollback rename failed ({rename_error}); backup copy also failed: {copy_error}"
+                    ))
+                })?;
+            }
+        } else {
+            copy_atomic(&self.backup, &self.target, 0o700)?;
+        }
+        sync_parent(&self.target)?;
+        let actual = sha256_file(&self.target)?;
+        if actual != self.expected_sha256 {
+            return Err(msg(format!(
+                "rolled-back xpad2 identity mismatch: expected {}, got {actual}",
+                self.expected_sha256
+            )));
+        }
+        Ok(())
+    }
+
+    fn commit(&self) -> Result<()> {
+        if self.rollback_staged.exists() {
+            fs::remove_file(&self.rollback_staged).at(&self.rollback_staged)?;
+            sync_parent(&self.rollback_staged)?;
+        }
+        Ok(())
     }
 }
 
@@ -499,6 +528,14 @@ pub fn apply(
     }
 
     cache_swap.commit()?;
+    if let Err(error) = binary_swap.commit() {
+        log.event(
+            "self-update",
+            "maintenance-warning",
+            json!({"cleanup": "rollback-staging", "error": error.to_string()}),
+        )?;
+        eprintln!("提示：更新已安装，但临时回滚副本清理失败：{error}");
+    }
     let cache_files_removed = match catalog::retain_managed_cache_releases(
         paths,
         &[target_cache.clone(), paths.cache.clone()],
@@ -514,7 +551,6 @@ pub fn apply(
             0
         }
     };
-    prune_binary_backups(paths, 1)?;
     let record = json!({
         "from_version": current.to_string(),
         "to_version": target.to_string(),
@@ -527,13 +563,21 @@ pub fn apply(
         "cache_files_removed": cache_files_removed,
         "manifest_sha256": sha256_bytes(&verified.raw),
         "source": verified.source,
-        "rollback_binary": binary_swap.backup,
+        "rollback_binary": binary_swap.backup.clone(),
     });
     atomic_write(
         &paths.state.join("last-self-update.json"),
         &serde_json::to_vec_pretty(&record)?,
         0o600,
     )?;
+    if let Err(error) = prune_binary_backups(paths, 2, &binary_swap.backup) {
+        log.event(
+            "self-update",
+            "maintenance-warning",
+            json!({"cleanup": "binary-backups", "error": error.to_string()}),
+        )?;
+        eprintln!("提示：更新已安装，但历史 ELF 备份回收失败：{error}");
+    }
     log.event("self-update", "installed", record)?;
     println!(
         "更新完成：xpad2 {}（catalog {}）；旧 ELF 已保留用于失败恢复",
@@ -2014,21 +2058,53 @@ fn install_candidate_binary(
     if sha256_file(&backup)? != current_sha {
         return Err(msg("self-update rollback backup identity mismatch"));
     }
-    copy_atomic(candidate, &target, 0o700)?;
-    sync_parent(&target)?;
-    if sha256_file(&target)? != sha256_file(candidate)? {
-        let _ = copy_atomic(&backup, &target, 0o700);
-        return Err(msg(
-            "installed xpad2 ELF failed post-write SHA-256 verification",
-        ));
+    let target_parent = target
+        .parent()
+        .ok_or_else(|| msg("current xpad2 executable has no parent directory"))?;
+    let target_name = target
+        .file_name()
+        .and_then(OsStr::to_str)
+        .unwrap_or("xpad2");
+    let rollback_staged = target_parent.join(format!(".{target_name}.{}.rollback", unique_id()));
+    copy_atomic(&backup, &rollback_staged, 0o700)?;
+    let swap = BinarySwap {
+        target: target.clone(),
+        backup,
+        rollback_staged,
+        expected_sha256: current_sha,
+    };
+    if let Err(error) = copy_atomic(candidate, &target, 0o700) {
+        let rollback = swap.rollback();
+        return Err(match rollback {
+            Ok(()) => error,
+            Err(rollback_error) => msg(format!(
+                "candidate installation failed ({error}); rollback also failed: {rollback_error}"
+            )),
+        });
     }
-    Ok(BinarySwap { target, backup })
+    let installed_identity =
+        (|| -> Result<bool> { Ok(sha256_file(&target)? == sha256_file(candidate)?) })();
+    if !matches!(installed_identity, Ok(true)) {
+        let identity_error = match installed_identity {
+            Ok(false) => "post-write SHA-256 mismatch".to_string(),
+            Ok(true) => unreachable!(),
+            Err(error) => format!("post-write identity check failed: {error}"),
+        };
+        let rollback = swap.rollback();
+        return Err(match rollback {
+            Ok(()) => msg(format!("installed xpad2 ELF {identity_error}")),
+            Err(rollback_error) => msg(format!(
+                "installed xpad2 ELF {identity_error}; rollback also failed: {rollback_error}"
+            )),
+        });
+    }
+    Ok(swap)
 }
 
-fn prune_binary_backups(paths: &Paths, keep: usize) -> Result<()> {
+fn prune_binary_backups(paths: &Paths, keep: usize, protected: &Path) -> Result<usize> {
     let dir = paths.state.join("update-backups");
     if !dir.exists() {
-        return Ok(());
+        return Ok(0);
     }
     let mut entries = fs::read_dir(&dir)
         .at(&dir)?
@@ -2047,11 +2123,19 @@ fn prune_binary_backups(paths: &Paths, keep: usize) -> Result<()> {
             .and_then(|metadata| metadata.modified())
             .ok()
     });
-    let remove_count = entries.len().saturating_sub(keep);
-    for entry in entries.into_iter().take(remove_count) {
+    let remove_count = entries.len().saturating_sub(keep.max(2));
+    let mut removed = 0usize;
+    for entry in entries {
+        if removed >= remove_count {
+            break;
+        }
+        if entry.path() == protected {
+            continue;
+        }
         fs::remove_file(entry.path()).at(entry.path())?;
+        removed += 1;
     }
-    Ok(())
+    Ok(removed)
 }
 
 fn extract_zip_safely(source: &Path, destination: &Path, max_total: u64) -> Result<()> {
@@ -2513,15 +2597,20 @@ mod tests {
         fs::create_dir_all(&root).unwrap();
         let binary = root.join("xpad2");
         let backup = root.join("xpad2.backup");
+        let rollback_staged = root.join(".xpad2.rollback");
         atomic_write(&binary, b"new", 0o700).unwrap();
         atomic_write(&backup, b"old", 0o700).unwrap();
+        atomic_write(&rollback_staged, b"old", 0o700).unwrap();
         BinarySwap {
             target: binary.clone(),
             backup,
+            rollback_staged: rollback_staged.clone(),
+            expected_sha256: sha256_bytes(b"old"),
         }
         .rollback()
         .unwrap();
         assert_eq!(fs::read(&binary).unwrap(), b"old");
+        assert!(!rollback_staged.exists());
 
         let cache = root.join("cache");
         let previous = root.join("cache.previous");
@@ -2536,6 +2625,38 @@ mod tests {
         .rollback()
         .unwrap();
         assert_eq!(fs::read(cache.join("marker")).unwrap(), b"old");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn binary_backup_pruning_keeps_two_and_never_removes_the_recorded_target() {
+        let root = test_dir("backup-prune");
+        let paths = Paths {
+            cache: root.join("cache/releases/current"),
+            cache_is_explicit: false,
+            managed_blob_root: root.join("cache/blobs"),
+            managed_cache_root: root.join("cache/releases"),
+            work: root.join("work"),
+            state: root.join("state"),
+            logs: root.join("logs"),
+            lock: root.join("operation.lock"),
+            root: root.clone(),
+        };
+        paths.ensure().unwrap();
+        let backup_dir = paths.state.join("update-backups");
+        fs::create_dir_all(&backup_dir).unwrap();
+        let protected = backup_dir.join("xpad2-v0.4.1-protected");
+        for name in [
+            "xpad2-v0.4.1-protected",
+            "xpad2-v0.4.2-old",
+            "xpad2-v0.4.3-old",
+            "xpad2-v0.4.4-new",
+        ] {
+            fs::write(backup_dir.join(name), name.as_bytes()).unwrap();
+        }
+        assert_eq!(prune_binary_backups(&paths, 2, &protected).unwrap(), 2);
+        assert!(protected.exists());
+        assert_eq!(fs::read_dir(&backup_dir).unwrap().count(), 2);
         fs::remove_dir_all(root).unwrap();
     }
 

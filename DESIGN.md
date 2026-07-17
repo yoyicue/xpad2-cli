@@ -1,6 +1,6 @@
 # XPad2 CLI 设计
 
-状态：v0.4.13 已实现；v0.1.1 完成 BoomInstaller 依赖身份和公开分发材料，v0.1.2
+状态：v0.4.14 已实现；v0.1.1 完成 BoomInstaller 依赖身份和公开分发材料，v0.1.2
 增加可验证的 OTA 冻结策略与 Root 前强制门禁，v0.1.3 对齐 KernelSU 驱动与
 官方生产签名 Manager 的 32547 构建号，v0.1.4 升级 late-load v0.2.1，恢复
 `u:r:ksu:s0` Manager Root 且保持全局 SELinux Enforcing；v0.1.5 将 BoomInstaller
@@ -39,6 +39,9 @@ v0.4.11 锁定 BoomInstaller r17，修正内嵌 v0.2.6 ELF 的运行时大小门
 v0.4.12 锁定 xpad-install v0.2.7 与 BoomInstaller r18，将已提交但仍未收敛的修复
 识别为 exit 76 pending，并只允许通过 `xpad2 status` 做只读复检。
 v0.4.13 将底层轮询严格调整为每 5 秒一次，并锁定 xpad-install v0.2.8 与 BoomInstaller r19。
+v0.4.14 加固控制面：确认所有自更新写操作都在全局操作锁内；所有 xpad-install 执行
+先过锁定 ELF/哈希门；损坏的默认托管缓存安全回退内嵌制品；ELF 复制改为流式原子写，
+失败回滚使用同目录预置副本并至少保留两个永久备份。
 
 验收覆盖单 ELF、只读状态探针、3-worker IonStack 临时 Root、KSU/SUU late-load、
 CLI/APK 身份验证、临时 Root 安全收口、同 boot 幂等重跑、普通重启后恢复、RSA 签名
@@ -727,7 +730,7 @@ licenses/
 完全一致，不能成为第二条版本线。固定名 update manifest 和 delta index 供 Latest Release
 发现；delta 只优化传输，不是独立版本线或信任根。
 
-## 14. v0.4.13 验收标准
+## 14. v0.4.14 验收标准
 
 1. 单个 `xpad2` ELF 可以被推送到 `/data/local/tmp` 并正常执行。
 2. `status` 和 `doctor` 不进行 Root 或持久修改。
@@ -761,13 +764,21 @@ licenses/
 29. 删除外部 `/data/local/tmp/xpad-install` 后，BoomInstaller 仍能用 APK 内置锁定引擎完成 0044 安装、清理临时文件，并在普通重启后独立恢复 UID 2000 服务。
 30. `version` 不扫描全部内嵌制品；每个制品只在实际解析/导出时验证大小与 SHA-256。
 31. 网络中断后下一次请求携带正确 Range 并续传；永久 4xx 不重试，限流等待服从响应头。
-32. 历史 cache 迁移为共享 SHA blob，只保留当前与一个回滚 release；旧 ELF 只保留一份。
+32. 历史 cache 迁移为共享 SHA blob，只保留当前与一个回滚 release；旧 ELF 至少保留两份。
 33. 发布脚本从上一稳定版生成更小的 zstd patch，验签后重建结果逐字节等于目标 ELF。
 34. 当前 ELF 的版本、大小、SHA-256 精确匹配时在线更新记录 `binary_mode=delta` 且不下载
     完整 ELF；任一基线字段不匹配时安全走完整 ELF。
 35. patch 缺失、损坏、超界或重建身份错误时不替换当前 ELF；完整 ELF 可用则自动回退，
     完整 ELF 同样不可用则事务明确失败并保留原版本。
-36. 官方 `moe.shizuku.privileged.api` 已安装时，BoomInstaller r16 仍能经健康 0044 安装，
+36. 官方 `moe.shizuku.privileged.api` 已安装时，BoomInstaller r19 仍能经健康 0044 安装，
     以 UID 2000 启动并由 provider 返回有效 Binder；全程 SELinux Enforcing。
 37. 31317 提交 anchor 后只在完整 `ZNXRUN_STATUS healthy` 时进入目标 APK 安装；alias
     延迟落盘会被有界轮询吸收，超时仍安全失败且目标 APK 未提交。
+38. 两个并发 mutating update 中只有持有 `OperationLock` 的进程可进入下载/替换/回滚；
+    另一个在修改共享状态前明确失败，`update --check` 保持只读。
+39. `status`、`doctor`、`installer-backup`、`cleanup` 和日志导出在运行 xpad-install 前均
+    验证 AArch64 ELF 与 catalog 锁定 SHA-256；错版或篡改文件只报告诊断，不执行。
+40. 默认托管 cache 的签名、JSON、版本或 blob 任一校验失败时回退内嵌锁定制品并告警；
+    `--cache-dir`/`XPAD2_CACHE_DIR` 显式 cache 的相同错误继续硬失败。
+41. 候选安装前存在同目录原子回滚副本；候选验证失败后恢复 ELF 精确哈希，且
+    `last-self-update.json` 指向的永久备份不会被同次回收删除。

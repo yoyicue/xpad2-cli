@@ -2,7 +2,7 @@ use crate::error::{IoContext, Result, msg};
 use sha2::{Digest, Sha256};
 use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
+use std::io::{BufReader, Read, Write};
 use std::os::fd::AsRawFd;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
@@ -205,8 +205,45 @@ pub fn atomic_write(path: &Path, bytes: &[u8], mode: u32) -> Result<()> {
 }
 
 pub fn copy_atomic(source: &Path, target: &Path, mode: u32) -> Result<()> {
-    let bytes = fs::read(source).at(source)?;
-    atomic_write(target, &bytes, mode)
+    let parent = target
+        .parent()
+        .ok_or_else(|| msg("target has no parent directory"))?;
+    fs::create_dir_all(parent).at(parent)?;
+    let partial = parent.join(format!(
+        ".{}.{}.partial",
+        target
+            .file_name()
+            .and_then(OsStr::to_str)
+            .unwrap_or("xpad2"),
+        unique_id()
+    ));
+    let result = (|| {
+        let source_file = File::open(source).at(source)?;
+        let expected = source_file.metadata().at(source)?.len();
+        let mut input = BufReader::with_capacity(128 * 1024, source_file);
+        let mut output = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .mode(0o600)
+            .open(&partial)
+            .at(&partial)?;
+        let copied = std::io::copy(&mut input, &mut output).at(&partial)?;
+        if copied != expected {
+            return Err(msg(format!(
+                "source size changed while copying {}: expected {expected}, copied {copied}",
+                source.display()
+            )));
+        }
+        output.sync_all().at(&partial)?;
+        fs::set_permissions(&partial, fs::Permissions::from_mode(mode)).at(&partial)?;
+        fs::rename(&partial, target).at(target)?;
+        File::open(parent).at(parent)?.sync_all().at(parent)?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&partial);
+    }
+    result
 }
 
 pub fn validate_elf_arm64(path: &Path) -> Result<()> {
@@ -372,5 +409,45 @@ mod tests {
         for bad in ["", "../0.2.0", "0/2/0", ".hidden", "0..2"] {
             assert!(managed_cache_path_at(root, bad, "catalog").is_err());
         }
+    }
+
+    #[test]
+    fn operation_lock_is_process_wide_exclusive() {
+        let root = std::env::temp_dir().join(format!("xpad2-lock-{}", unique_id()));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("operation.lock");
+        let first = OperationLock::acquire(&path).unwrap();
+        assert!(OperationLock::acquire(&path).is_err());
+        drop(first);
+        OperationLock::acquire(&path).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn atomic_copy_streams_and_replaces_the_target() {
+        let root = std::env::temp_dir().join(format!("xpad2-copy-{}", unique_id()));
+        fs::create_dir_all(&root).unwrap();
+        let source = root.join("source");
+        let target = root.join("target");
+        let bytes = (0..4 * 1024 * 1024)
+            .map(|index| (index % 251) as u8)
+            .collect::<Vec<_>>();
+        fs::write(&source, &bytes).unwrap();
+        fs::write(&target, b"old").unwrap();
+        copy_atomic(&source, &target, 0o700).unwrap();
+        assert_eq!(sha256_file(&target).unwrap(), sha256_bytes(&bytes));
+        assert_eq!(
+            target.metadata().unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+        assert_eq!(
+            fs::read_dir(&root)
+                .unwrap()
+                .filter_map(std::result::Result::ok)
+                .filter(|entry| entry.file_name().to_string_lossy().contains("partial"))
+                .count(),
+            0
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 }

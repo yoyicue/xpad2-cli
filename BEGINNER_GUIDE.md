@@ -49,30 +49,30 @@ adb -s 你的设备序列号
 ## 3. 下载并校验 xpad2
 
 当前正式版本是
-[`v0.4.13`](https://github.com/yoyicue/xpad2-cli/releases/tag/v0.4.13)。只需要下载：
+[`v0.4.14`](https://github.com/yoyicue/xpad2-cli/releases/tag/v0.4.14)。只需要下载：
 
 ```text
-xpad2-v0.4.13-android-arm64
+xpad2-v0.4.14-android-arm64
 ```
 
 macOS 或 Linux 可以直接执行：
 
 ```sh
-curl -fLO https://github.com/yoyicue/xpad2-cli/releases/download/v0.4.13/xpad2-v0.4.13-android-arm64
-shasum -a 256 xpad2-v0.4.13-android-arm64
+curl -fLO https://github.com/yoyicue/xpad2-cli/releases/download/v0.4.14/xpad2-v0.4.14-android-arm64
+shasum -a 256 xpad2-v0.4.14-android-arm64
 ```
 
 Windows PowerShell 可以执行：
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/yoyicue/xpad2-cli/releases/download/v0.4.13/xpad2-v0.4.13-android-arm64" -OutFile "xpad2-v0.4.13-android-arm64"
-Get-FileHash .\xpad2-v0.4.13-android-arm64 -Algorithm SHA256
+Invoke-WebRequest -Uri "https://github.com/yoyicue/xpad2-cli/releases/download/v0.4.14/xpad2-v0.4.14-android-arm64" -OutFile "xpad2-v0.4.14-android-arm64"
+Get-FileHash .\xpad2-v0.4.14-android-arm64 -Algorithm SHA256
 ```
 
 正确的 SHA-256 是：
 
 ```text
-7adad11f2bec5a5d18c0448646b26e66c5e6915b93e6e3b44b10a75db9710845
+9650caa66aaf65178be605749b48491b40fb62fb64b4a3a407b1c9ead270866f
 ```
 
 哈希不一致时不要继续，重新下载文件。
@@ -82,7 +82,7 @@ Get-FileHash .\xpad2-v0.4.13-android-arm64 -Algorithm SHA256
 在下载文件所在目录执行：
 
 ```sh
-adb push xpad2-v0.4.13-android-arm64 /data/local/tmp/xpad2
+adb push xpad2-v0.4.14-android-arm64 /data/local/tmp/xpad2
 adb shell chmod 700 /data/local/tmp/xpad2
 adb shell /data/local/tmp/xpad2 version
 ```
@@ -90,7 +90,7 @@ adb shell /data/local/tmp/xpad2 version
 最后一条命令应显示：
 
 ```text
-xpad2 0.4.13 (catalog 2026-07-16.14)
+xpad2 0.4.14 (catalog 2026-07-17.1)
 ```
 
 这就表示 `xpad2` 已经安装到了：
@@ -295,7 +295,7 @@ adb shell /data/local/tmp/xpad2 update --offline /data/local/tmp/xpad2-update-vX
 adb shell rm /data/local/tmp/xpad2-update-vX.Y.Z.zip
 ```
 
-如果当前仍是 v0.1.x，需要先按第 3–4 节手工覆盖到当前 v0.4.13 一次；旧版本没有
+如果当前仍是 v0.1.x，需要先按第 3–4 节手工覆盖到当前 v0.4.14 一次；旧版本没有
 自更新命令。
 
 ## 常见问题

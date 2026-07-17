@@ -15,8 +15,6 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant};
 
-const XPAD_INSTALL: &str = "/data/local/tmp/xpad-install";
-
 pub fn install_locked_cli(
     catalog: &Catalog,
     paths: &Paths,
@@ -31,7 +29,7 @@ pub fn install_locked_cli(
     let state = device::cli_status(artifact);
     if state.state == ComponentState::Installed {
         if id == "xpad-installer" {
-            ensure_installer_backup(log)?;
+            ensure_installer_backup(artifact, log)?;
         }
         log.event(
             "component",
@@ -64,23 +62,26 @@ pub fn install_locked_cli(
         if !output.text.contains("XPAD_INSTALL_SELF_TEST status=ok") {
             return Err(msg("xpad-install self-test returned no success marker"));
         }
-        ensure_installer_backup(log)?;
+        ensure_installer_backup(artifact, log)?;
     }
     log.event("component", "installed", json!({"id": id, "target": target, "sha256": actual, "source": resolved.source_description()}))?;
     println!("✓ {id}: 已安装并验证");
     Ok(true)
 }
 
-pub fn ensure_installer_backup(log: &mut TransactionLog) -> Result<bool> {
-    if !Path::new(XPAD_INSTALL).is_file() {
-        return Err(msg(
-            "xpad-install is not installed; cannot maintain installer-backup",
-        ));
-    }
+pub fn ensure_installer_backup(
+    xpad_installer: &Artifact,
+    log: &mut TransactionLog,
+) -> Result<bool> {
+    let verified = device::verify_locked_cli_path(xpad_installer).map_err(|error| {
+        msg(format!(
+            "refusing installer-backup repair with unverified xpad-install: {error}"
+        ))
+    })?;
     println!("检查 0044 备用安装身份（健康时不创建事务）…");
     let output = log.run_streaming(
         "xpad-install znxrun ensure",
-        XPAD_INSTALL,
+        verified,
         &["znxrun", "ensure"],
     )?;
     if !output.status.success() {
@@ -90,7 +91,7 @@ pub fn ensure_installer_backup(log: &mut TransactionLog) -> Result<bool> {
             &output.text,
         ));
     }
-    let state = device::installer_backup_status();
+    let state = device::installer_backup_status(xpad_installer);
     if state.state != ComponentState::Active {
         return Err(msg(format!(
             "installer-backup final verification failed: {}",
@@ -292,6 +293,7 @@ pub fn install_locked_apk(
         )));
     }
     install_locked_cli(catalog, paths, "xpad-installer", log)?;
+    let xpad_installer = catalog.artifact("xpad-installer")?;
     let resolved = catalog.resolve(id, paths)?;
     let bytes = verified_bytes(&resolved)?;
     let staged = paths.work.join(&artifact.filename);
@@ -302,12 +304,12 @@ pub fn install_locked_apk(
 
     let mut changed = false;
     if !needs_activation {
-        install_apk_with_xpad_install(&staged, &identity, log)?;
+        install_apk_with_xpad_install(&staged, &identity, xpad_installer, log)?;
         changed = true;
         verify_installed(artifact, &identity)?;
     }
     if id == "boominstaller" {
-        activate_boom(&identity, log)?;
+        activate_boom(&identity, xpad_installer, log)?;
         changed = true;
         let final_state = device::apk_status(artifact);
         if final_state.state != ComponentState::Active {
@@ -329,7 +331,11 @@ pub fn install_locked_apk(
     Ok(changed)
 }
 
-pub fn install_arbitrary_apk(path: &Path, log: &mut TransactionLog) -> Result<ApkIdentity> {
+pub fn install_arbitrary_apk(
+    path: &Path,
+    xpad_installer: &Artifact,
+    log: &mut TransactionLog,
+) -> Result<ApkIdentity> {
     let identity = apk::inspect(path)?;
     apk::check_arm64_compatible(&identity)?;
     println!(
@@ -355,12 +361,12 @@ pub fn install_arbitrary_apk(path: &Path, log: &mut TransactionLog) -> Result<Ap
             return Ok(installed);
         }
     }
-    if !Path::new(XPAD_INSTALL).exists() {
-        return Err(msg(
-            "xpad-install is not installed; run `xpad2 install xpad-installer` first",
-        ));
-    }
-    install_apk_with_xpad_install(path, &identity, log)?;
+    device::verify_locked_cli_path(xpad_installer).map_err(|error| {
+        msg(format!(
+            "xpad-install is missing or unverified; run `xpad2 install xpad-installer`: {error}"
+        ))
+    })?;
+    install_apk_with_xpad_install(path, &identity, xpad_installer, log)?;
     let installed = device::installed_apk_identity(&identity.package)?.ok_or_else(|| {
         msg(format!(
             "PackageManager cannot find {} after install",
@@ -413,8 +419,14 @@ fn verify_locked_apk_identity(artifact: &Artifact, identity: &ApkIdentity) -> Re
 fn install_apk_with_xpad_install(
     path: &Path,
     identity: &ApkIdentity,
+    xpad_installer: &Artifact,
     log: &mut TransactionLog,
 ) -> Result<()> {
+    let verified = device::verify_locked_cli_path(xpad_installer).map_err(|error| {
+        msg(format!(
+            "refusing APK installation with unverified xpad-install: {error}"
+        ))
+    })?;
     let path_text = path.to_str().ok_or_else(|| msg("invalid APK path"))?;
     let already_installed = device::installed_apk_identity(&identity.package)?.is_some();
     let (verb, backend, action) = apk_install_plan(already_installed);
@@ -430,7 +442,7 @@ fn install_apk_with_xpad_install(
     let command_name = format!("xpad-install {verb} --backend {backend}");
     let output = log.run_streaming(
         &command_name,
-        XPAD_INSTALL,
+        verified,
         &[verb, "--backend", backend, path_text],
     )?;
     if !output.status.success() {
@@ -481,7 +493,16 @@ fn verify_installed(artifact: &Artifact, expected: &ApkIdentity) -> Result<()> {
     Ok(())
 }
 
-fn activate_boom(identity: &ApkIdentity, log: &mut TransactionLog) -> Result<()> {
+fn activate_boom(
+    identity: &ApkIdentity,
+    xpad_installer: &Artifact,
+    log: &mut TransactionLog,
+) -> Result<()> {
+    let verified = device::verify_locked_cli_path(xpad_installer).map_err(|error| {
+        msg(format!(
+            "refusing BoomInstaller activation with unverified xpad-install: {error}"
+        ))
+    })?;
     let apk_path = device::installed_apk_path(&identity.package)?.ok_or_else(|| {
         msg(format!(
             "PackageManager cannot find {} before activation",
@@ -511,7 +532,7 @@ fn activate_boom(identity: &ApkIdentity, log: &mut TransactionLog) -> Result<()>
     println!("激活 BoomInstaller 并配置普通开机自启动，预计约 20–60 秒…");
     let output = log.run_streaming(
         "xpad-install activate",
-        XPAD_INSTALL,
+        verified,
         &["activate", &starter_arg, &apk_arg],
     )?;
     if !output.status.success() {

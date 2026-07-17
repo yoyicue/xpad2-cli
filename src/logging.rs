@@ -1,3 +1,5 @@
+use crate::catalog::Catalog;
+use crate::device;
 use crate::error::{IoContext, Result, msg};
 use crate::model::Receipt;
 use crate::util::{
@@ -389,7 +391,7 @@ fn device_identifiers() -> &'static [String] {
     })
 }
 
-pub fn export_logs(paths: &Paths, destination: &Path) -> Result<PathBuf> {
+pub fn export_logs(catalog: &Catalog, paths: &Paths, destination: &Path) -> Result<PathBuf> {
     paths.ensure()?;
     if !destination.is_dir() {
         return Err(msg(format!(
@@ -466,16 +468,31 @@ pub fn export_logs(paths: &Paths, destination: &Path) -> Result<PathBuf> {
         )?;
         capture(&staging.join("dmesg.txt"), "/system/bin/dmesg", &[])?;
         if Path::new("/data/local/tmp/xpad-install").is_file() {
-            capture(
-                &staging.join("xpad-install-self-test.txt"),
-                "/data/local/tmp/xpad-install",
-                &["self-test"],
-            )?;
-            capture(
-                &staging.join("xpad-install-0044-status.txt"),
-                "/data/local/tmp/xpad-install",
-                &["znxrun", "status"],
-            )?;
+            match catalog
+                .artifact("xpad-installer")
+                .and_then(device::verify_locked_cli_path)
+            {
+                Ok(program) => {
+                    capture(
+                        &staging.join("xpad-install-self-test.txt"),
+                        program,
+                        &["self-test"],
+                    )?;
+                    capture(
+                        &staging.join("xpad-install-0044-status.txt"),
+                        program,
+                        &["znxrun", "status"],
+                    )?;
+                }
+                Err(error) => {
+                    atomic_write(
+                        &staging.join("xpad-install-integrity.txt"),
+                        format!("refused to execute /data/local/tmp/xpad-install: {error}\n")
+                            .as_bytes(),
+                        0o600,
+                    )?;
+                }
+            }
         }
         capture(
             &staging.join("boom-autostart-status.txt"),

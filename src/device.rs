@@ -1,5 +1,6 @@
 use crate::apk;
 use crate::catalog::Catalog;
+use crate::error::{IoContext, Result, msg};
 use crate::model::{Artifact, ComponentState, ComponentStatus, DeviceStatus};
 use crate::ota;
 use crate::util::{
@@ -285,8 +286,37 @@ pub fn cli_status(artifact: &Artifact) -> ComponentStatus {
     }
 }
 
-pub fn installer_backup_status() -> ComponentStatus {
-    let target = Path::new("/data/local/tmp/xpad-install");
+pub fn verify_locked_cli_path(artifact: &Artifact) -> Result<&str> {
+    let target = artifact
+        .target
+        .as_deref()
+        .ok_or_else(|| msg(format!("locked CLI {} has no target", artifact.id)))?;
+    let path = Path::new(target);
+    let metadata = fs::symlink_metadata(path).at(path)?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(msg(format!(
+            "locked CLI target is not a regular file: {}",
+            path.display()
+        )));
+    }
+    validate_elf_arm64(path)?;
+    let actual = sha256_file(path)?;
+    if actual != artifact.sha256 {
+        return Err(msg(format!(
+            "locked CLI SHA-256 mismatch for {}: expected {}, got {actual}",
+            artifact.id, artifact.sha256
+        )));
+    }
+    Ok(target)
+}
+
+pub fn installer_backup_status(xpad_installer: &Artifact) -> ComponentStatus {
+    let target = Path::new(
+        xpad_installer
+            .target
+            .as_deref()
+            .unwrap_or("/data/local/tmp/xpad-install"),
+    );
     if !target.is_file() {
         return status(
             "installer-backup",
@@ -294,10 +324,19 @@ pub fn installer_backup_status() -> ComponentStatus {
             Some("xpad-install is not installed"),
         );
     }
-    match run(
-        target.to_str().unwrap_or("/data/local/tmp/xpad-install"),
-        &["znxrun", "status"],
-    ) {
+    let verified = match verify_locked_cli_path(xpad_installer) {
+        Ok(path) => path,
+        Err(error) => {
+            return status(
+                "installer-backup",
+                ComponentState::Broken,
+                Some(&format!(
+                    "refusing to execute unverified xpad-install: {error}"
+                )),
+            );
+        }
+    };
+    match run(verified, &["znxrun", "status"]) {
         Ok(output) => parse_installer_backup_status(output.status.success(), &output_text(&output)),
         Err(error) => status(
             "installer-backup",
@@ -593,8 +632,8 @@ pub fn snapshot(catalog: &Catalog, paths: &Paths) -> DeviceStatus {
     }
     if let Ok(artifact) = catalog.artifact("xpad-installer") {
         components.push(cli_status(artifact));
+        components.push(installer_backup_status(artifact));
     }
-    components.push(installer_backup_status());
     if let Ok(artifact) = catalog.artifact("boominstaller") {
         components.push(apk_status(artifact));
     }
@@ -698,6 +737,36 @@ mod tests {
             "ZNXRUN_STATUS status=healthy alias=healthy uid=10070 expected_uid=10070 anchor=anchored",
         );
         assert_eq!(state.state, ComponentState::Broken);
+    }
+
+    #[test]
+    fn installer_backup_refuses_a_tampered_xpad_installer_before_execution() {
+        let catalog = Catalog::load().unwrap();
+        let locked = catalog.artifact("xpad-installer").unwrap();
+        let mut artifact = locked.clone();
+        let root = std::env::temp_dir().join(format!(
+            "xpad2-device-integrity-{}",
+            crate::util::unique_id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let target = root.join("xpad-install");
+        let mut bytes = crate::catalog::verify_embedded_artifact(locked)
+            .unwrap()
+            .to_vec();
+        let last = bytes.last_mut().unwrap();
+        *last ^= 0x01;
+        fs::write(&target, bytes).unwrap();
+        artifact.target = Some(target.display().to_string());
+
+        let state = installer_backup_status(&artifact);
+        assert_eq!(state.state, ComponentState::Broken);
+        assert!(
+            state
+                .detail
+                .as_deref()
+                .is_some_and(|detail| detail.contains("SHA-256 mismatch"))
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

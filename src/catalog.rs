@@ -95,23 +95,29 @@ impl Catalog {
         let catalog_path = paths.cache.join("catalog.json");
         let sig_path = paths.cache.join("catalog.sig");
         if catalog_path.exists() || sig_path.exists() {
-            match verify_external_catalog(&paths.cache, self) {
-                Ok(external) => {
-                    if let Some(entry) = external.artifacts.iter().find(|a| a.id == id) {
-                        let blob = paths.cache.join("blobs").join(&entry.sha256);
-                        if fs::symlink_metadata(&blob).is_ok() {
-                            verify_cache_blob_reference(&blob, entry, paths)?;
-                            return Ok(ResolvedArtifact {
-                                artifact,
-                                source: ResolvedSource::Cache(blob),
-                            });
-                        }
+            let cached = (|| -> Result<Option<PathBuf>> {
+                let external = verify_external_catalog(&paths.cache, self)?;
+                if let Some(entry) = external.artifacts.iter().find(|a| a.id == id) {
+                    let blob = paths.cache.join("blobs").join(&entry.sha256);
+                    if fs::symlink_metadata(&blob).is_ok() {
+                        verify_cache_blob_reference(&blob, entry, paths)?;
+                        return Ok(Some(blob));
                     }
                 }
-                Err(error) if may_ignore_managed_cache_error(&error, paths.cache_is_explicit) => {
+                Ok(None)
+            })();
+            match cached {
+                Ok(Some(blob)) => {
+                    return Ok(ResolvedArtifact {
+                        artifact,
+                        source: ResolvedSource::Cache(blob),
+                    });
+                }
+                Ok(None) => {}
+                Err(error) if managed_cache_may_fall_back(paths.cache_is_explicit) => {
                     if !STALE_MANAGED_CACHE_WARNED.swap(true, Ordering::Relaxed) {
                         eprintln!(
-                            "提示：默认缓存属于其他 xpad2 版本，已忽略并改用当前 ELF 的内嵌锁定制品；可执行 `xpad2 cache clear` 或导入同版本缓存。"
+                            "提示：默认托管缓存校验失败，已忽略并改用当前 ELF 的内嵌锁定制品：{error}；可执行 `xpad2 cache clear`。"
                         );
                     }
                 }
@@ -184,8 +190,8 @@ pub fn export_embedded_cache(
     Ok(exported)
 }
 
-fn may_ignore_managed_cache_error(error: &Error, cache_is_explicit: bool) -> bool {
-    !cache_is_explicit && matches!(error, Error::CatalogReleaseMismatch)
+fn managed_cache_may_fall_back(cache_is_explicit: bool) -> bool {
+    !cache_is_explicit
 }
 
 fn signature_bytes(raw: &[u8]) -> Result<Vec<u8>> {
@@ -737,13 +743,26 @@ mod tests {
     }
 
     #[test]
-    fn only_default_cache_may_fall_back_from_a_signed_other_release() {
-        let mismatch = Error::CatalogReleaseMismatch;
-        assert!(may_ignore_managed_cache_error(&mismatch, false));
-        assert!(!may_ignore_managed_cache_error(&mismatch, true));
-        assert!(!may_ignore_managed_cache_error(
-            &msg("bad signature"),
-            false
-        ));
+    fn default_cache_validation_failure_falls_back_but_explicit_cache_is_strict() {
+        assert!(managed_cache_may_fall_back(false));
+        assert!(!managed_cache_may_fall_back(true));
+
+        let catalog = Catalog::load().unwrap();
+        let paths = test_paths("invalid-default-signature");
+        paths.ensure().unwrap();
+        fs::write(paths.cache.join("catalog.json"), LOCK_JSON).unwrap();
+        fs::write(paths.cache.join("catalog.sig"), b"invalid-signature").unwrap();
+        let resolved = catalog.resolve("xpad-installer", &paths).unwrap();
+        assert!(matches!(resolved.source, ResolvedSource::Embedded(_)));
+
+        let mut explicit = test_paths("invalid-explicit-signature");
+        explicit.cache_is_explicit = true;
+        explicit.ensure().unwrap();
+        fs::write(explicit.cache.join("catalog.json"), LOCK_JSON).unwrap();
+        fs::write(explicit.cache.join("catalog.sig"), b"invalid-signature").unwrap();
+        assert!(catalog.resolve("xpad-installer", &explicit).is_err());
+
+        fs::remove_dir_all(paths.root).unwrap();
+        fs::remove_dir_all(explicit.root).unwrap();
     }
 }

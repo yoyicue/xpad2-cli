@@ -61,8 +61,8 @@ fn run_main() -> Result<()> {
         "unfreeze" => command_unfreeze(&catalog, &paths, &args[1..])?,
         "install" => command_install(&catalog, &paths, &args[1..])?,
         "repair" => command_repair(&catalog, &paths, &args[1..])?,
-        "cleanup" => command_cleanup(&paths)?,
-        "logs" => command_logs(&paths, &args[1..])?,
+        "cleanup" => command_cleanup(&catalog, &paths)?,
+        "logs" => command_logs(&catalog, &paths, &args[1..])?,
         "cache" => command_cache(&catalog, &paths, &args[1..])?,
         "update" => command_update(&catalog, &paths, &args[1..])?,
         "_update-verify-candidate" => update::verify_candidate_command(&catalog, &args[1..])?,
@@ -189,7 +189,9 @@ fn command_info(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<()>
         println!(
             "id: installer-backup\nkind: policy\nidentity: znxrun / device OEM installer UID\nanchor: com.yoyicue.xpad2.installeranchor\nlifecycle: persistent package metadata"
         );
-        render_component(&device::installer_backup_status());
+        render_component(&device::installer_backup_status(
+            catalog.artifact("xpad-installer")?,
+        ));
         return Ok(());
     }
     let artifact = catalog.artifact(id)?;
@@ -405,7 +407,8 @@ fn install_arbitrary_apk(catalog: &Catalog, paths: &Paths, args: &[String]) -> R
     simple_transaction(paths, "install apk", |log| {
         device::profile_check(catalog)?;
         install::install_locked_cli(catalog, paths, "xpad-installer", log)?;
-        let identity = install::install_arbitrary_apk(&source, log)?;
+        let identity =
+            install::install_arbitrary_apk(&source, catalog.artifact("xpad-installer")?, log)?;
         println!(
             "installed: {} versionCode={}",
             identity.package, identity.version_code
@@ -431,7 +434,7 @@ fn command_repair(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<(
     transaction::install_components(catalog, paths, args)
 }
 
-fn command_cleanup(paths: &Paths) -> Result<()> {
+fn command_cleanup(catalog: &Catalog, paths: &Paths) -> Result<()> {
     paths.ensure()?;
     let _lock = OperationLock::acquire(&paths.lock)?;
     let mut log = TransactionLog::start(paths, "cleanup")?;
@@ -446,25 +449,31 @@ fn command_cleanup(paths: &Paths) -> Result<()> {
         session.close(&mut log)?;
     }
     if Path::new("/data/local/tmp/xpad-install").exists() {
-        match log.run_streaming(
-            "xpad-install cleanup",
-            "/data/local/tmp/xpad-install",
-            &["cleanup"],
-        ) {
-            Ok(output) if output.status.success() => {}
-            Ok(output) if output.status.code() == Some(75) => {
-                installer_cleanup_error = Some(crate::error::needs_reboot(
-                    "xpad-install cleanup found a per-boot unsafe state",
-                ));
-            }
-            Ok(output) => {
+        let verified = catalog
+            .artifact("xpad-installer")
+            .and_then(device::verify_locked_cli_path);
+        match verified {
+            Err(error) => {
                 installer_cleanup_error = Some(msg(format!(
-                    "xpad-install cleanup failed (exit {:?}): {}",
-                    output.status.code(),
-                    output.text
-                )));
+                    "refusing xpad-install cleanup with an unverified engine: {error}"
+                )))
             }
-            Err(error) => installer_cleanup_error = Some(error),
+            Ok(program) => match log.run_streaming("xpad-install cleanup", program, &["cleanup"]) {
+                Ok(output) if output.status.success() => {}
+                Ok(output) if output.status.code() == Some(75) => {
+                    installer_cleanup_error = Some(crate::error::needs_reboot(
+                        "xpad-install cleanup found a per-boot unsafe state",
+                    ));
+                }
+                Ok(output) => {
+                    installer_cleanup_error = Some(msg(format!(
+                        "xpad-install cleanup failed (exit {:?}): {}",
+                        output.status.code(),
+                        output.text
+                    )));
+                }
+                Err(error) => installer_cleanup_error = Some(error),
+            },
         }
     }
     install::cleanup_work(paths)?;
@@ -499,11 +508,11 @@ fn command_cleanup(paths: &Paths) -> Result<()> {
     Ok(())
 }
 
-fn command_logs(paths: &Paths, args: &[String]) -> Result<()> {
+fn command_logs(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<()> {
     if args.len() != 2 || args[0] != "export" {
         return Err(msg("usage: xpad2 logs export DIRECTORY"));
     }
-    let output = logging::export_logs(paths, Path::new(&args[1]))?;
+    let output = logging::export_logs(catalog, paths, Path::new(&args[1]))?;
     println!("{}", output.display());
     Ok(())
 }
@@ -575,6 +584,9 @@ fn command_update(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<(
     if request.check {
         return update::check(catalog, paths, &request);
     }
+    // Keep every mutating update step inside this transaction: its OperationLock
+    // is acquired before TransactionLog::start and before update::apply performs
+    // downloads, cache swaps, binary replacement, rollback, or receipt writes.
     simple_transaction(paths, "self update", |log| {
         let changed = update::apply(catalog, paths, &request, log)?;
         Ok(if changed {

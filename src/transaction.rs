@@ -113,7 +113,7 @@ pub fn install_components(catalog: &Catalog, paths: &Paths, requested: &[String]
             // anchor should make that rewrite persistent by itself; this final
             // idempotent pass also repairs and verifies the fallback after all
             // requested APK transactions have completed.
-            install::ensure_installer_backup(&mut log)?;
+            install::ensure_installer_backup(catalog.artifact("xpad-installer")?, &mut log)?;
         }
         Ok(())
     })();
@@ -175,7 +175,7 @@ pub fn install_components(catalog: &Catalog, paths: &Paths, requested: &[String]
                 .iter()
                 .any(|id| id == "xpad-installer" || id == "installer-backup"))
     {
-        let state = device::installer_backup_status();
+        let state = device::installer_backup_status(catalog.artifact("xpad-installer")?);
         if state.state != ComponentState::Active {
             result = Err(msg(format!(
                 "final installer-backup verification failed: {}",
