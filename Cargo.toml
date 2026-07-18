@@ -1,9 +1,9 @@
 [package]
 name = "xpad2"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2024"
 license = "GPL-3.0-or-later"
-description = "Root-capable signed installer and self-updater for XPad2 /260"
+description = "Root-capable signed installer and self-updater for XPad2 /19-/260"
 repository = "https://github.com/yoyicue/xpad2-cli"
 build = "build.rs"
 

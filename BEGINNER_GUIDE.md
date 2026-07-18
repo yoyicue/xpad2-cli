@@ -20,17 +20,20 @@ alps/vnd_ls12_mt8797_wifi_64/ls12_mt8797_wifi_64:13/TP1A.220624.014/<19..260>:us
 ```
 
 其中 `<19..260>` 表示 canonical 十进制闭区间，不是字面文本。设备和构建前缀、
-`:user/release-keys` 后缀、内核 `4.19.191` 系列、精确 `uname -v` 及 arm64 ABI 仍必须
-匹配。该范围不等于所有旧内核都已支持。
+`:user/release-keys` 后缀、内核 `4.19.191` 系列及 arm64 ABI 仍必须匹配。
 V231227 的 `/1703659196` 当前不在生产支持范围内。
 
-当前只接受以下三种精确 `uname -v`：
+以下三种精确 `uname -v` 会直接走快速路径：
 
 ```text
 #1 SMP PREEMPT Tue Aug 13 02:06:24 CST 2024   (xpad2-v19-a)
 #1 SMP PREEMPT Mon Dec 16 23:29:13 CST 2024   (xpad2-v19-b)
 #1 SMP PREEMPT Mon Jun 29 04:08:29 CST 2026   (xpad2-v260)
 ```
+
+范围内的其他 `uname -v` 不会在入口被拒绝。Root 时程序先运行只读 discovery；只有
+至少两个 offset anchor 唯一指向上述某一 profile，并完成 preflight 与无写入 validate，
+才继续最终 Root。证据不足或候选冲突会安全停止并保留诊断日志。
 
 临时 Root 过程存在自动重启或 kernel panic 风险。不要在电量过低时操作，也不要在执行
 过程中拔线、强制关机或同时启动第二个 `xpad2`。
@@ -62,30 +65,30 @@ adb -s 你的设备序列号
 ## 3. 下载并校验 xpad2
 
 当前正式版本是
-[`v0.5.0`](https://github.com/yoyicue/xpad2-cli/releases/tag/v0.5.0)。只需要下载：
+[`v0.5.1`](https://github.com/yoyicue/xpad2-cli/releases/tag/v0.5.1)。只需要下载：
 
 ```text
-xpad2-v0.5.0-android-arm64
+xpad2-v0.5.1-android-arm64
 ```
 
 macOS 或 Linux 可以直接执行：
 
 ```sh
-curl -fLO https://github.com/yoyicue/xpad2-cli/releases/download/v0.5.0/xpad2-v0.5.0-android-arm64
-shasum -a 256 xpad2-v0.5.0-android-arm64
+curl -fLO https://github.com/yoyicue/xpad2-cli/releases/download/v0.5.1/xpad2-v0.5.1-android-arm64
+shasum -a 256 xpad2-v0.5.1-android-arm64
 ```
 
 Windows PowerShell 可以执行：
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/yoyicue/xpad2-cli/releases/download/v0.5.0/xpad2-v0.5.0-android-arm64" -OutFile "xpad2-v0.5.0-android-arm64"
-Get-FileHash .\xpad2-v0.5.0-android-arm64 -Algorithm SHA256
+Invoke-WebRequest -Uri "https://github.com/yoyicue/xpad2-cli/releases/download/v0.5.1/xpad2-v0.5.1-android-arm64" -OutFile "xpad2-v0.5.1-android-arm64"
+Get-FileHash .\xpad2-v0.5.1-android-arm64 -Algorithm SHA256
 ```
 
 正确的 SHA-256 是：
 
 ```text
-5d77ff265a125ed767cf19ace37760382cb478dcbbc8c73db16525620bdbccce
+2a03faf398b9de2011d5fc1d5d69bb66192fee7e03998fe3f518d2246a1a5ac3
 ```
 
 哈希不一致时不要继续，重新下载文件。
@@ -95,7 +98,7 @@ Get-FileHash .\xpad2-v0.5.0-android-arm64 -Algorithm SHA256
 在下载文件所在目录执行：
 
 ```sh
-adb push xpad2-v0.5.0-android-arm64 /data/local/tmp/xpad2
+adb push xpad2-v0.5.1-android-arm64 /data/local/tmp/xpad2
 adb shell chmod 700 /data/local/tmp/xpad2
 adb shell /data/local/tmp/xpad2 version
 ```
@@ -103,7 +106,7 @@ adb shell /data/local/tmp/xpad2 version
 最后一条命令应显示：
 
 ```text
-xpad2 0.5.0 (catalog 2026-07-18.3)
+xpad2 0.5.1 (catalog 2026-07-18.4)
 ```
 
 这就表示 `xpad2` 已经安装到了：
@@ -315,7 +318,7 @@ adb shell rm /data/local/tmp/xpad2-update-vX.Y.Z.zip
 ```
 
 如果当前仍是 v0.1.x，或设备不是精确 `/260` 且当前 xpad2 早于 v0.5.0，需要先按
-第 3–4 节手工覆盖到当前 v0.5.0 一次；旧 updater 的精确 `/260` 门禁无法自行跨入
+第 3–4 节手工覆盖到当前 v0.5.1 一次；旧 updater 的精确 `/260` 门禁无法自行跨入
 新的 fingerprint 范围。
 
 ## 常见问题

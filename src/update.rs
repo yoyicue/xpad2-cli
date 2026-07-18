@@ -6,8 +6,8 @@ use crate::model::AssetsLock;
 #[cfg(test)]
 use crate::model::DeviceProfile;
 use crate::util::{
-    Paths, atomic_write, copy_atomic, getprop, kernel_release, kernel_version, safe_filename,
-    sha256_bytes, sha256_file, unique_id, validate_elf_arm64,
+    Paths, atomic_write, copy_atomic, getprop, kernel_release, safe_filename, sha256_bytes,
+    sha256_file, unique_id, validate_elf_arm64,
 };
 use semver::Version;
 use serde::{Deserialize, Serialize};
@@ -969,10 +969,9 @@ fn validate_target_profile(manifest: &UpdateManifest, catalog: &Catalog) -> Resu
     let fingerprint = getprop("ro.build.fingerprint");
     let abi = getprop("ro.product.cpu.abi");
     let kernel = kernel_release();
-    let version = kernel_version();
     if !catalog
         .lock
-        .matches_runtime(&fingerprint, &kernel, &version, &abi)
+        .matches_technical_runtime(&fingerprint, &kernel, &abi)
     {
         return Err(msg(
             "current device does not match the signed update profile",

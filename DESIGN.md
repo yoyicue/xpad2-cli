@@ -1,6 +1,6 @@
 # XPad2 CLI 设计
 
-状态：v0.5.0 已实现；v0.1.1 完成 BoomInstaller 依赖身份和公开分发材料，v0.1.2
+状态：v0.5.1 已实现；v0.1.1 完成 BoomInstaller 依赖身份和公开分发材料，v0.1.2
 增加可验证的 OTA 冻结策略与 Root 前强制门禁，v0.1.3 对齐 KernelSU 驱动与
 官方生产签名 Manager 的 32547 构建号，v0.1.4 升级 late-load v0.2.1，恢复
 `u:r:ksu:s0` Manager Root 且保持全局 SELinux Enforcing；v0.1.5 将 BoomInstaller
@@ -46,6 +46,9 @@ v0.5.0 将 XPad2 fingerprint incremental 从精确 `/260` 扩为 canonical `/19`
 闭区间，并集成 `xpad2-ionstack-poc release/xpad2-19-260` 的 `v19-a`、`v19-b`、`v260`
 三套 runner/preload。设备/Android 前缀、release-keys 后缀、精确 kernel build 与 ABI 仍
 fail closed；精确 `/260` 保留为旧 updater 的网络 manifest 兼容锚点。
+v0.5.1 修正 v0.5.0 将精确 `uname -v` 错放到控制面入口的问题：范围内未知 build 先以
+共同 perf target 做只读 offset discovery，至少两个独立 anchor 唯一命中后选择 profile，
+再通过 runner 的 preflight、validate 和显式 compatible-write 状态；精确 build 保留快速路径。
 
 验收覆盖单 ELF、只读状态探针、3-worker IonStack 临时 Root、KSU/SUU late-load、
 CLI/APK 身份验证、临时 Root 安全收口、同 boot 幂等重跑、普通重启后恢复、RSA 签名
@@ -734,14 +737,15 @@ licenses/
 完全一致，不能成为第二条版本线。固定名 update manifest 和 delta index 供 Latest Release
 发现；delta 只优化传输，不是独立版本线或信任根。
 
-## 14. v0.5.0 验收标准
+## 14. v0.5.1 验收标准
 
 1. 单个 `xpad2` ELF 可以被推送到 `/data/local/tmp` 并正常执行。
 2. `status` 和 `doctor` 不进行 Root 或持久修改。
 3. `freeze ota`/`unfreeze ota` 幂等且只改变锁定的系统 OTA 主包。
 4. 所有 Root 入口在 IonStack 前完成 OTA 冻结，冻结失败时不进入利用链。
 5. canonical `/19`–`/260` fingerprint profile 可以进入控制面；三种精确 kernel build
-   分别选择 v19-a/v19-b/v260 runner/preload，未知 build 在利用前 fail closed。
+   分别快速选择 v19-a/v19-b/v260 runner/preload。未知 build 进入只读 discovery；两个
+   独立 anchor 唯一选型并完成 preflight/validate 后才进入写入，未知或冲突证据安全停止。
 6. 两个 profile 分别激活锁定 KSU/SUU 和对应 Manager；APK 身份、`xpad-install` 哈希正确。
 7. 完成后 SELinux 为 Enforcing，安装事务创建的临时 Root 窗口已关闭。
 8. 再次执行同一 profile 能根据真实状态跳过完成项，不重复 Root 或重装。
@@ -789,9 +793,10 @@ licenses/
     `last-self-update.json` 指向的永久备份不会被同次回收删除。
 42. fingerprint 固定前缀与 `:user/release-keys` 后缀不变，穷举接受 canonical
     incremental 19–260；18、261、前导零、符号、溢出和尾随字符全部拒绝。
-    fingerprint 范围不能替代精确 `uname -v` 门禁，旧 kernel/offset profile 不会被误放行。
-    V231227 `/1703659196` 即使被 POC 识别，也在独立 offsets 动态验证前保持拒绝。
-43. v0.5.0 的 signed catalog 顶层携带三套 IonStack profile 映射，update manifest 仅携带
+    fingerprint 范围只负责技术范围门，不能直接决定 kernel offsets；未知 `uname -v`
+    必须由至少两个独立动态 anchor 唯一选型，并先完成无写入 validate。
+    V231227 `/1703659196` 位于范围外，保持拒绝。
+43. v0.5.1 的 signed catalog 顶层携带三套 IonStack profile 映射及对应 discovery offsets，update manifest 仅携带
     精确 `/260` 兼容锚点；v0.4.14 会忽略未知 catalog 顶层字段，仍能在 /260 上完成升级。
 44. BoomInstaller Provider 必须同时报告 ready、配对密钥存在且可解密、paired，并区分
     network-untrusted、wireless-adb-not-started、key-invalid 与 pending-reboot；仅凭进程和

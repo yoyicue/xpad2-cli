@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct AssetsLock {
@@ -8,6 +9,8 @@ pub struct AssetsLock {
     pub profile: DeviceProfile,
     #[serde(default)]
     pub ionstack_profiles: Vec<IonStackProfile>,
+    #[serde(default)]
+    pub ionstack_discovery_profiles: Vec<IonStackDiscoveryProfile>,
     pub artifacts: Vec<Artifact>,
 }
 
@@ -41,6 +44,13 @@ pub struct IonStackProfile {
     pub perf_target_artifact: String,
     pub preload_artifact: String,
     pub chainwalk_probe_artifact: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct IonStackDiscoveryProfile {
+    pub profile_id: String,
+    pub offsets: BTreeMap<String, String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]

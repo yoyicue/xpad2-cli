@@ -1,4 +1,6 @@
 use crate::error::{Result, msg};
+#[cfg(test)]
+use crate::model::IonStackDiscoveryProfile;
 use crate::model::{AssetsLock, DeviceProfile, IonStackProfile};
 use std::collections::BTreeSet;
 
@@ -38,11 +40,17 @@ impl AssetsLock {
             if self.profile.kernel_version.is_empty() {
                 return Err(msg("legacy device profile has an empty kernel build"));
             }
+            if !self.ionstack_discovery_profiles.is_empty() {
+                return Err(msg(
+                    "legacy device profile unexpectedly has discovery profiles",
+                ));
+            }
             return Ok(());
         }
 
         let mut ids = BTreeSet::new();
         let mut kernel_versions = BTreeSet::new();
+        let mut perf_target = None;
         for profile in &self.ionstack_profiles {
             if profile.id.is_empty()
                 || profile.kernel_version.is_empty()
@@ -67,6 +75,57 @@ impl AssetsLock {
                     profile.kernel_version
                 )));
             }
+            match perf_target {
+                None => perf_target = Some(profile.perf_target_artifact.as_str()),
+                Some(id) if id == profile.perf_target_artifact => {}
+                Some(_) => {
+                    return Err(msg(
+                        "IonStack profiles must share one read-only discovery target",
+                    ));
+                }
+            }
+        }
+
+        if self.ionstack_discovery_profiles.len() != self.ionstack_profiles.len() {
+            return Err(msg(
+                "IonStack discovery catalog must cover every artifact profile",
+            ));
+        }
+        let mut discovery_ids = BTreeSet::new();
+        for discovery in &self.ionstack_discovery_profiles {
+            if !ids.contains(discovery.profile_id.as_str()) {
+                return Err(msg(format!(
+                    "IonStack discovery references unknown profile {}",
+                    discovery.profile_id
+                )));
+            }
+            if !discovery_ids.insert(discovery.profile_id.as_str()) {
+                return Err(msg(format!(
+                    "duplicate IonStack discovery profile: {}",
+                    discovery.profile_id
+                )));
+            }
+            let mut offsets = BTreeSet::new();
+            for (name, value) in &discovery.offsets {
+                let offset = parse_anchor_offset(value).ok_or_else(|| {
+                    msg(format!(
+                        "invalid IonStack discovery offset {}:{}={value:?}",
+                        discovery.profile_id, name
+                    ))
+                })?;
+                if name.is_empty() || !offsets.insert(offset) {
+                    return Err(msg(format!(
+                        "IonStack discovery profile {} has an empty or duplicate anchor",
+                        discovery.profile_id
+                    )));
+                }
+            }
+            if offsets.len() < 2 {
+                return Err(msg(format!(
+                    "IonStack discovery profile {} needs at least two independent anchors",
+                    discovery.profile_id
+                )));
+            }
         }
         Ok(())
     }
@@ -75,6 +134,32 @@ impl AssetsLock {
         self.ionstack_profiles
             .iter()
             .find(|profile| profile.kernel_version == kernel_version)
+    }
+
+    pub fn ionstack_profile(&self, profile_id: &str) -> Option<&IonStackProfile> {
+        self.ionstack_profiles
+            .iter()
+            .find(|profile| profile.id == profile_id)
+    }
+
+    pub fn ionstack_artifacts_for_profile(
+        &self,
+        profile_id: &str,
+    ) -> Option<IonStackArtifacts<'_>> {
+        let profile = self.ionstack_profile(profile_id)?;
+        Some(IonStackArtifacts {
+            profile_id: &profile.id,
+            runner: &profile.runner_artifact,
+            perf_target: &profile.perf_target_artifact,
+            preload: &profile.preload_artifact,
+            chainwalk_probe: &profile.chainwalk_probe_artifact,
+        })
+    }
+
+    pub fn ionstack_discovery_target(&self) -> Option<&str> {
+        self.ionstack_profiles
+            .first()
+            .map(|profile| profile.perf_target_artifact.as_str())
     }
 
     pub fn ionstack_artifacts(&self, kernel_version: &str) -> Option<IonStackArtifacts<'_>> {
@@ -90,15 +175,21 @@ impl AssetsLock {
                 });
         }
         let profile = self.selected_ionstack_profile(kernel_version)?;
-        Some(IonStackArtifacts {
-            profile_id: &profile.id,
-            runner: &profile.runner_artifact,
-            perf_target: &profile.perf_target_artifact,
-            preload: &profile.preload_artifact,
-            chainwalk_probe: &profile.chainwalk_probe_artifact,
-        })
+        self.ionstack_artifacts_for_profile(&profile.id)
     }
 
+    pub fn matches_technical_runtime(
+        &self,
+        fingerprint: &str,
+        kernel_release: &str,
+        abi: &str,
+    ) -> bool {
+        self.profile.fingerprint_policy().matches(fingerprint)
+            && kernel_release.starts_with(&self.profile.kernel_release_prefix)
+            && abi == self.profile.abi
+    }
+
+    #[cfg(test)]
     pub fn matches_runtime(
         &self,
         fingerprint: &str,
@@ -106,22 +197,17 @@ impl AssetsLock {
         kernel_version: &str,
         abi: &str,
     ) -> bool {
-        self.profile.fingerprint_policy().matches(fingerprint)
-            && kernel_release.starts_with(&self.profile.kernel_release_prefix)
+        self.matches_technical_runtime(fingerprint, kernel_release, abi)
             && self.ionstack_artifacts(kernel_version).is_some()
-            && abi == self.profile.abi
     }
+}
 
-    pub fn kernel_build_expectation(&self) -> String {
-        if self.ionstack_profiles.is_empty() {
-            return format!("{:?}", self.profile.kernel_version);
-        }
-        self.ionstack_profiles
-            .iter()
-            .map(|profile| format!("{}={:?}", profile.id, profile.kernel_version))
-            .collect::<Vec<_>>()
-            .join(", ")
+pub fn parse_anchor_offset(value: &str) -> Option<u64> {
+    let digits = value.strip_prefix("0x")?;
+    if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return None;
     }
+    u64::from_str_radix(digits, 16).ok()
 }
 
 impl FingerprintPolicy<'_> {
@@ -237,7 +323,24 @@ mod tests {
                     "260",
                 ),
             ],
+            ionstack_discovery_profiles: vec![
+                discovery_profile("xpad2-v19-a", "0x00be6de8"),
+                discovery_profile("xpad2-v19-b", "0x00be7210"),
+                discovery_profile("xpad2-v260", "0x00be4c48"),
+            ],
             artifacts: Vec::new(),
+        }
+    }
+
+    fn discovery_profile(id: &str, distinct: &str) -> IonStackDiscoveryProfile {
+        IonStackDiscoveryProfile {
+            profile_id: id.to_string(),
+            offsets: [
+                ("distinct".to_string(), distinct.to_string()),
+                ("shared".to_string(), "0x020fb2b8".to_string()),
+            ]
+            .into_iter()
+            .collect(),
         }
     }
 
@@ -382,7 +485,7 @@ mod tests {
     }
 
     #[test]
-    fn unknown_kernel_build_fails_closed_even_inside_fingerprint_range() {
+    fn unknown_kernel_build_enters_discovery_without_becoming_exact() {
         let lock = ranged_lock();
         let fingerprint = format!("{PREFIX}19{SUFFIX}");
         assert!(!lock.matches_runtime(
@@ -391,7 +494,9 @@ mod tests {
             "#1 SMP PREEMPT unknown",
             "arm64-v8a"
         ));
+        assert!(lock.matches_technical_runtime(&fingerprint, "4.19.191+", "arm64-v8a"));
         assert!(lock.ionstack_artifacts("#1 SMP PREEMPT unknown").is_none());
+        assert_eq!(lock.ionstack_discovery_profiles.len(), 3);
     }
 
     #[test]
@@ -424,8 +529,8 @@ mod tests {
         )))
         .unwrap();
         assert_eq!(legacy.schema, 1);
-        assert_eq!(legacy.product_version, "0.5.0");
-        assert_eq!(legacy.catalog_version, "2026-07-18.3");
+        assert_eq!(legacy.product_version, "0.5.1");
+        assert_eq!(legacy.catalog_version, "2026-07-18.4");
         assert!(legacy.profile.build_fingerprint.contains("/260:"));
         assert_eq!(legacy.profile.kernel_release_prefix, "4.19.191");
         assert_eq!(legacy.profile.abi, "arm64-v8a");

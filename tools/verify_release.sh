@@ -7,6 +7,24 @@ DIST="$ROOT/dist"
 tmp_dir=$(mktemp -d /tmp/xpad2-release-verify.XXXXXX)
 trap 'rm -rf "$tmp_dir"' EXIT
 
+ionstack_commit=$(jq -r '.sources[] | select(.component == "ionstack") | .commit' \
+  "$ROOT/sources.lock.json")
+upstream_profiles=$(git -C "$ROOT/../xpad2-ionstack-poc" show \
+  "$ionstack_commit:profiles/xpad2_profiles.json")
+jq -e --argjson upstream "$upstream_profiles" '
+  ([.ionstack_profiles[] |
+      {name:.id,kernel_version}] | sort_by(.name)) ==
+    ([$upstream.profiles[] | select(.release) |
+      {name,kernel_version}] | sort_by(.name)) and
+  ([.ionstack_discovery_profiles[] |
+      {name:.profile_id,offsets}] | sort_by(.name)) ==
+    ([$upstream.profiles[] | select(.release) |
+      {name,offsets}] | sort_by(.name))
+' "$ROOT/assets.lock.json" >/dev/null || {
+  printf 'signed IonStack profile/discovery catalog drifted from locked upstream source\n' >&2
+  exit 1
+}
+
 (
   cd "$DIST"
   shasum -a 256 -c SHA256SUMS

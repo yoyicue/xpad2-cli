@@ -305,6 +305,7 @@ pub fn verify_external_catalog(cache: &Path, baseline: &Catalog) -> Result<Asset
         || external.catalog_version != baseline.lock.catalog_version
         || external.profile != baseline.lock.profile
         || external.ionstack_profiles != baseline.lock.ionstack_profiles
+        || external.ionstack_discovery_profiles != baseline.lock.ionstack_discovery_profiles
     {
         return Err(Error::CatalogReleaseMismatch);
     }
@@ -781,6 +782,7 @@ mod tests {
                 abi: "arm64-v8a".to_string(),
             },
             ionstack_profiles: Vec::new(),
+            ionstack_discovery_profiles: Vec::new(),
             artifacts: vec![artifact],
         };
         let source = paths.root.join("source");

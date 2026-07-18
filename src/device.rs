@@ -751,7 +751,7 @@ pub fn snapshot(catalog: &Catalog, paths: &Paths) -> DeviceStatus {
     let fingerprint_policy = catalog.lock.profile.fingerprint_policy();
     let supported = catalog
         .lock
-        .matches_runtime(&fingerprint, &kernel, &version, &abi);
+        .matches_technical_runtime(&fingerprint, &kernel, &abi);
     let mut components = Vec::new();
     components.push(ota::status());
     components.push(ksu_status(paths));
@@ -799,7 +799,6 @@ pub fn snapshot(catalog: &Catalog, paths: &Paths) -> DeviceStatus {
 pub fn profile_check(catalog: &Catalog) -> crate::error::Result<()> {
     let fingerprint = getprop("ro.build.fingerprint");
     let kernel = kernel_release();
-    let version = kernel_version();
     let abi = getprop("ro.product.cpu.abi");
     let policy = catalog.lock.profile.fingerprint_policy();
     policy.validate()?;
@@ -814,13 +813,6 @@ pub fn profile_check(catalog: &Catalog) -> crate::error::Result<()> {
         return Err(crate::error::msg(format!(
             "unsupported kernel: expected {}*, got {}",
             catalog.lock.profile.kernel_release_prefix, kernel
-        )));
-    }
-    if catalog.lock.ionstack_artifacts(&version).is_none() {
-        return Err(crate::error::msg(format!(
-            "unsupported kernel build: expected one of [{}], got {:?}",
-            catalog.lock.kernel_build_expectation(),
-            version
         )));
     }
     if abi != catalog.lock.profile.abi {

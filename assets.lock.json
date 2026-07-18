@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "product_version": "0.5.0",
-  "catalog_version": "2026-07-18.3",
+  "product_version": "0.5.1",
+  "catalog_version": "2026-07-18.4",
   "profile": {
     "build_fingerprint": "alps/vnd_ls12_mt8797_wifi_64/ls12_mt8797_wifi_64:13/TP1A.220624.014/260:user/release-keys",
     "build_fingerprint_prefix": "alps/vnd_ls12_mt8797_wifi_64/ls12_mt8797_wifi_64:13/TP1A.220624.014/",
@@ -36,6 +36,59 @@
       "perf_target_artifact": "ionstack-perf-target",
       "preload_artifact": "ionstack-preload-v260",
       "chainwalk_probe_artifact": "ionstack-chainwalk-probe"
+    }
+  ],
+  "ionstack_discovery_profiles": [
+    {
+      "profile_id": "xpad2-v19-a",
+      "offsets": {
+        "ashmem_llseek": "0x00be6de8",
+        "ashmem_read_iter": "0x00be6e84",
+        "ashmem_ioctl": "0x00be6f38",
+        "ashmem_compat_ioctl": "0x00be7878",
+        "ashmem_mmap": "0x00be78c4",
+        "ashmem_open": "0x00be7a30",
+        "ashmem_release": "0x00be7ab0",
+        "ashmem_show_fdinfo": "0x00be7bc4",
+        "ashmem_fops": "0x011409f0",
+        "ashmem_misc_fops": "0x0181d960",
+        "selinux_state": "0x020fb2b8",
+        "selinux_enforcing": "0x020fb2b9"
+      }
+    },
+    {
+      "profile_id": "xpad2-v19-b",
+      "offsets": {
+        "ashmem_llseek": "0x00be7210",
+        "ashmem_read_iter": "0x00be72ac",
+        "ashmem_ioctl": "0x00be7360",
+        "ashmem_compat_ioctl": "0x00be7ca0",
+        "ashmem_mmap": "0x00be7cec",
+        "ashmem_open": "0x00be7e58",
+        "ashmem_release": "0x00be7ed8",
+        "ashmem_show_fdinfo": "0x00be7fec",
+        "ashmem_fops": "0x011409f0",
+        "ashmem_misc_fops": "0x0181d960",
+        "selinux_state": "0x020fb2b8",
+        "selinux_enforcing": "0x020fb2b9"
+      }
+    },
+    {
+      "profile_id": "xpad2-v260",
+      "offsets": {
+        "ashmem_llseek": "0x00be4c48",
+        "ashmem_read_iter": "0x00be4ce4",
+        "ashmem_ioctl": "0x00be4d98",
+        "ashmem_compat_ioctl": "0x00be56d8",
+        "ashmem_mmap": "0x00be5724",
+        "ashmem_open": "0x00be5890",
+        "ashmem_release": "0x00be5910",
+        "ashmem_show_fdinfo": "0x00be5a24",
+        "ashmem_fops": "0x011409f0",
+        "ashmem_misc_fops": "0x0181d960",
+        "selinux_state": "0x020fb2b8",
+        "selinux_enforcing": "0x020fb2b9"
+      }
     }
   ],
   "artifacts": [
