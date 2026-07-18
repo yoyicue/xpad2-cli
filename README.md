@@ -14,6 +14,17 @@ Root 状态。
 
 ## 快速开始
 
+先检查 Pad 是否已经存在 `xpad2`：
+
+```sh
+adb -s SERIAL shell /data/local/tmp/xpad2 version
+```
+
+如果能输出版本，禁止再用裸 `adb push` 覆盖；它发生在 `xpad2` 控制面之外，不检查
+semver，也不能阻止旧 ELF 覆盖新 ELF。此时只使用 `xpad2 update --check` / `xpad2 update`。
+下面的下载和 push 仅用于首次安装，或当前 ELF 已损坏、完全无法启动的恢复现场；恢复时
+必须从 GitHub Latest 而不是历史 tag 下载。
+
 从同一版本 Release 下载 `xpad2-vX.Y.Z-android-arm64`：
 
 ```sh

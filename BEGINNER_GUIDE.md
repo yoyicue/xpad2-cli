@@ -66,6 +66,17 @@ adb -s 你的设备序列号
 
 ## 3. 下载并校验 xpad2
 
+先检查 Pad 上是否已经安装：
+
+```sh
+adb shell /data/local/tmp/xpad2 version
+```
+
+如果命令能输出版本，不要继续本节，也不要用 `adb push` 覆盖；直接跳到“更新 xpad2”一节
+执行 `xpad2 update --check` 和 `xpad2 update`。裸 `adb push` 不经过版本判断，会让历史
+版本覆盖当前新版本。只有首次安装，或现有 ELF 已损坏、完全不能执行时，才按下面流程
+手工恢复；恢复文件必须来自 GitHub Latest，不能照搬历史 tag 内的旧指南。
+
 当前正式版本是
 [`v0.5.2`](https://github.com/yoyicue/xpad2-cli/releases/tag/v0.5.2)。只需要下载：
 
@@ -97,7 +108,7 @@ d63c9f03b6160c8b6c857c0a299411979d676a5918648ccdce386e8b9b40a7c3
 
 ## 4. 把 xpad2 安装到 Pad
 
-在下载文件所在目录执行：
+本节仅适用于首次安装或损坏恢复。在下载文件所在目录执行：
 
 ```sh
 adb push xpad2-v0.5.2-android-arm64 /data/local/tmp/xpad2
