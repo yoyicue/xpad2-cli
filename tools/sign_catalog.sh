@@ -5,6 +5,7 @@ umask 077
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 BACKUP=${XPAD2_RELEASE_SIGNING_BACKUP:-}
+KEY_DIR=${XPAD2_RELEASE_KEY_DIR:-"$HOME/.android/keys"}
 PUBLIC_KEY="$ROOT/keys/catalog-release-public.pem"
 EXPECTED_CERT_SHA256=3cb5b69579d23197ced8100818a85a46b821383a504b394a44cfe3e98ade78a2
 EXPECTED_RECOVERY_FINGERPRINT=SHA256:cOVa4bIB0vgNbqR5Vi95Q0QFDLY7lJX79sHEHTm1Q2U
@@ -14,30 +15,41 @@ die() {
   exit 1
 }
 
-[[ -n "$BACKUP" ]] || die signing-backup-not-set
-KEYSTORE="$BACKUP/xpad2-boom-release.p12"
-SECRET_FILE="$BACKUP/xpad2-boom-release-password.rsa-oaep-sha256"
-RECOVERY_KEY="$BACKUP/recovery-rsa/id_rsa"
-CERT="$BACKUP/xpad2-boom-release-cert.pem"
+if [[ -n "$BACKUP" ]]; then
+  KEYSTORE="$BACKUP/xpad2-boom-release.p12"
+  SECRET_FILE="$BACKUP/xpad2-boom-release-password.rsa-oaep-sha256"
+  RECOVERY_KEY="$BACKUP/recovery-rsa/id_rsa"
+  RECOVERY_PUBLIC_KEY="$BACKUP/recovery-rsa/id_rsa.pub"
+  CERT="$BACKUP/xpad2-boom-release-cert.pem"
+else
+  KEYSTORE="$KEY_DIR/xpad2-boom-release.p12"
+  SECRET_FILE="$KEY_DIR/xpad2-boom-release-password.rsa-oaep-sha256"
+  RECOVERY_KEY=${XPAD2_RELEASE_RECOVERY_KEY:-"$HOME/.ssh/id_rsa"}
+  RECOVERY_PUBLIC_KEY=${XPAD2_RELEASE_RECOVERY_PUBLIC_KEY:-"$HOME/.ssh/id_rsa.pub"}
+  CERT="$KEY_DIR/xpad2-boom-release-cert.pem"
+fi
 
 (($# == 2)) || die usage-input-catalog-output-signature
 INPUT=$1
 OUTPUT=$2
 
 [[ -f "$INPUT" ]] || die catalog-missing
-[[ -f "$BACKUP/SHA256SUMS" ]] || die backup-manifest-missing
 [[ -f "$KEYSTORE" && -f "$SECRET_FILE" && -f "$RECOVERY_KEY" && -f "$CERT" ]] || \
   die signing-material-missing
+[[ -f "$RECOVERY_PUBLIC_KEY" ]] || die recovery-public-key-missing
 [[ -f "$PUBLIC_KEY" ]] || die public-key-missing
 
-(
-  cd "$BACKUP"
-  shasum -a 256 -c SHA256SUMS >/dev/null
-) || die backup-checksum
+if [[ -n "$BACKUP" ]]; then
+  [[ -f "$BACKUP/SHA256SUMS" ]] || die backup-manifest-missing
+  (
+    cd "$BACKUP"
+    shasum -a 256 -c SHA256SUMS >/dev/null
+  ) || die backup-checksum
+fi
 
 cert_sha=$(openssl x509 -in "$CERT" -outform DER | shasum -a 256 | awk '{print $1}')
 [[ "$cert_sha" == "$EXPECTED_CERT_SHA256" ]] || die certificate-mismatch
-recovery_fingerprint=$(ssh-keygen -lf "$BACKUP/recovery-rsa/id_rsa.pub" | awk '{print $2}')
+recovery_fingerprint=$(ssh-keygen -lf "$RECOVERY_PUBLIC_KEY" | awk '{print $2}')
 [[ "$recovery_fingerprint" == "$EXPECTED_RECOVERY_FINGERPRINT" ]] || \
   die recovery-key-mismatch
 

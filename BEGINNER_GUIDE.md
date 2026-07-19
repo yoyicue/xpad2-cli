@@ -78,30 +78,30 @@ adb shell /data/local/tmp/xpad2 version
 手工恢复；恢复文件必须来自 GitHub Latest，不能照搬历史 tag 内的旧指南。
 
 当前正式版本是
-[`v0.5.3`](https://github.com/yoyicue/xpad2-cli/releases/tag/v0.5.3)。只需要下载：
+[`v0.5.4`](https://github.com/yoyicue/xpad2-cli/releases/tag/v0.5.4)。只需要下载：
 
 ```text
-xpad2-v0.5.3-android-arm64
+xpad2-v0.5.4-android-arm64
 ```
 
 macOS 或 Linux 可以直接执行：
 
 ```sh
-curl -fLO https://github.com/yoyicue/xpad2-cli/releases/download/v0.5.3/xpad2-v0.5.3-android-arm64
-shasum -a 256 xpad2-v0.5.3-android-arm64
+curl -fLO https://github.com/yoyicue/xpad2-cli/releases/download/v0.5.4/xpad2-v0.5.4-android-arm64
+shasum -a 256 xpad2-v0.5.4-android-arm64
 ```
 
 Windows PowerShell 可以执行：
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/yoyicue/xpad2-cli/releases/download/v0.5.3/xpad2-v0.5.3-android-arm64" -OutFile "xpad2-v0.5.3-android-arm64"
-Get-FileHash .\xpad2-v0.5.3-android-arm64 -Algorithm SHA256
+Invoke-WebRequest -Uri "https://github.com/yoyicue/xpad2-cli/releases/download/v0.5.4/xpad2-v0.5.4-android-arm64" -OutFile "xpad2-v0.5.4-android-arm64"
+Get-FileHash .\xpad2-v0.5.4-android-arm64 -Algorithm SHA256
 ```
 
 正确的 SHA-256 是：
 
 ```text
-43efaf0258c93566aeed46fc37e580057bd30a7326ac8a90113b26dadbb810da
+807489eabb141bcfa2be617d324cadf6d414e0bebb274cc787bc8d277bf0f9d5
 ```
 
 哈希不一致时不要继续，重新下载文件。
@@ -111,7 +111,7 @@ Get-FileHash .\xpad2-v0.5.3-android-arm64 -Algorithm SHA256
 本节仅适用于首次安装或损坏恢复。在下载文件所在目录执行：
 
 ```sh
-adb push xpad2-v0.5.3-android-arm64 /data/local/tmp/xpad2
+adb push xpad2-v0.5.4-android-arm64 /data/local/tmp/xpad2
 adb shell chmod 700 /data/local/tmp/xpad2
 adb shell /data/local/tmp/xpad2 version
 ```
@@ -119,7 +119,7 @@ adb shell /data/local/tmp/xpad2 version
 最后一条命令应显示：
 
 ```text
-xpad2 0.5.3 (catalog 2026-07-19.1)
+xpad2 0.5.4 (catalog 2026-07-19.2)
 ```
 
 这就表示 `xpad2` 已经安装到了：
@@ -347,7 +347,7 @@ adb shell rm /data/local/tmp/xpad2-update-vX.Y.Z.zip
 ```
 
 如果当前仍是 v0.1.x，或设备不是精确 `/260` 且当前 xpad2 早于 v0.5.0，需要先按
-第 3–4 节手工覆盖到当前 v0.5.3 一次；旧 updater 的精确 `/260` 门禁无法自行跨入
+第 3–4 节手工覆盖到当前 v0.5.4 一次；旧 updater 的精确 `/260` 门禁无法自行跨入
 新的 fingerprint 范围。
 
 ## 常见问题

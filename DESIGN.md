@@ -1,6 +1,6 @@
 # XPad2 CLI 设计
 
-状态：v0.5.3 已实现；v0.1.1 完成 BoomInstaller 依赖身份和公开分发材料，v0.1.2
+状态：v0.5.4 已实现；v0.1.1 完成 BoomInstaller 依赖身份和公开分发材料，v0.1.2
 增加可验证的 OTA 冻结策略与 Root 前强制门禁，v0.1.3 对齐 KernelSU 驱动与
 官方生产签名 Manager 的 32547 构建号，v0.1.4 升级 late-load v0.2.1，恢复
 `u:r:ksu:s0` Manager Root 且保持全局 SELinux Enforcing；v0.1.5 将 BoomInstaller
@@ -56,6 +56,9 @@ v0.5.2 将设备门拆为产品族门与 Root 技术门：签名 XPad2 fingerpri
 v0.5.3 锁定 xpad-installer v0.2.13 与 BoomInstaller r23：Root broker 保持真实 UID 0，
 经学而思 OEM Provider 提交 APK；Provider 可读副本随机、短生命周期且事务结束即删除。
 ADB-shell 路径继续使用受管 0044，31317 仍只允许修复 0044，不接收目标 APK。
+v0.5.4 锁定 xpad-installer v0.2.14 与 BoomInstaller r24：APK 与 DEX 暂存改用每次事务
+唯一文件名并在成功或失败后清理，历史只读残留不再导致下一次 0044 安装以 staging I/O
+错误提前退出；错误仍保留机器可读的 artifact、path 与 errno 供远程诊断。
 
 验收覆盖单 ELF、只读状态探针、3-worker IonStack 临时 Root、KSU/SUU late-load、
 CLI/APK 身份验证、临时 Root 安全收口、同 boot 幂等重跑、普通重启后恢复、RSA 签名
@@ -527,10 +530,10 @@ xpad2-cache/
 ```json
 {
   "id": "xpad-installer",
-  "version": "0.2.13",
+  "version": "0.2.14",
   "kind": "cli",
-  "sha256": "aa30623d33247067c45b6faffa2887c1dfa76acd7bbceb1033fd3bde03d1475e",
-  "size": 96968,
+  "sha256": "641eb9d1d790397e3087a41b922cd8f807188ff382d42938f1beb55a10b2d743",
+  "size": 98472,
   "target": "/data/local/tmp/xpad-install"
 }
 ```
@@ -710,8 +713,8 @@ xpad2log-YYYYMMDD-HHMMSS.zip
 | SukiSU Ultra module | XPad2 Linux 4.19 v0.1.0 / 40796 | `5835dbed566e9711fab02c3b729e6dce495b996481af53c474f2be4816e7fd81` |
 | `ksud-sukisu-xpad2` | SukiSU Ultra v4.1.3 / 40796 | `74379a3c1a556448762db00d8e1316b31a4cf56a1eb1b8accd8447a1e3859bd8` |
 | SukiSU Ultra Manager | v4.1.3 / 40796 | `1b1e837c0a5b6aa34554882fad67cef6db6ca1a84d43e07dd904cf54f8d261ae` |
-| `xpad-install` | v0.2.13 | `aa30623d33247067c45b6faffa2887c1dfa76acd7bbceb1033fd3bde03d1475e` |
-| BoomInstaller | v13.6.0.r23.ffa4217 production | `51b3eaba56c5cabc4c0aeeffe182e4c806fb7af743d0a63782edd0bd1c311e46` |
+| `xpad-install` | v0.2.14 | `641eb9d1d790397e3087a41b922cd8f807188ff382d42938f1beb55a10b2d743` |
+| BoomInstaller | v13.6.0.r24.2f6e7c2 production | `e9940c3b4931731320ac30cb2459ed661d0ef02ca8539260bf9fc6d3834389b0` |
 
 版本号相等不是 runtime/Manager 兼容性的判据；两套组合分别由 catalog 显式锁定。
 
@@ -744,7 +747,7 @@ licenses/
 完全一致，不能成为第二条版本线。固定名 update manifest 和 delta index 供 Latest Release
 发现；delta 只优化传输，不是独立版本线或信任根。
 
-## 14. v0.5.3 验收标准
+## 14. v0.5.4 验收标准
 
 1. 单个 `xpad2` ELF 可以被推送到 `/data/local/tmp` 并正常执行。
 2. `status` 和 `doctor` 不进行 Root 或持久修改。
@@ -815,6 +818,9 @@ licenses/
 46. 同产品族但不满足 Root 门的设备上，`update --check`、OTA、`xpad-installer`、
     `installer-backup`、Manager、BoomInstaller 和任意 CLI/APK 不被 Root profile 拦截；
     `root`、`ksu`、`suu`、`full`、`suu-full` 在任何 IonStack 写入前明确拒绝。
-47. BoomInstaller r23 在 KSU 真机中以 UID 0 启动 server/broker，经 OEM Provider 安装
+47. BoomInstaller r24 在 KSU 真机中以 UID 0 启动 server/broker，经 OEM Provider 安装
     目标 APK 并核验 installer 为 `com.tal.pad.znxxservice`；Provider 副本、私有 staging
     和内嵌 CLI 均在事务结束后删除。Magisk/KSU/SUU 复用同一 libsu UID 0 合约。
+48. xpad-install 与 BoomInstaller 的 APK/DEX 暂存文件逐事务唯一；旧固定名只读残留、
+    并发事务或上次中断不会阻断新事务，staging I/O 失败明确返回 artifact/path/errno 且
+    Windows 工具不会误导用户重启。
