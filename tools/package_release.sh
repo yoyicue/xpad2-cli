@@ -7,6 +7,7 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 PARENT=$(dirname "$ROOT")
 VERSION=$(awk -F '"' '/^version = / {print $2; exit}' "$ROOT/Cargo.toml")
 ARTIFACT_DIR=${XPAD2_ARTIFACT_DIR:-}
+IONSTACK_SOURCE=${XPAD2_IONSTACK_SOURCE:-$PARENT/xpad2-ionstack-poc}
 DIST="$ROOT/dist"
 STAGE="$DIST/.stage-v$VERSION"
 PACKAGE="$STAGE/xpad2-v$VERSION-android-arm64"
@@ -54,20 +55,20 @@ source_for() {
     done
   fi
   case "$id" in
-    ionstack-runner-v19-a) printf '%s\n' "$PARENT/xpad2-ionstack-poc/dist/xpad2-19-260/profiles/xpad2-v19-a/ionstack_reroot_device" ;;
-    ionstack-preload-v19-a) printf '%s\n' "$PARENT/xpad2-ionstack-poc/dist/xpad2-19-260/profiles/xpad2-v19-a/ionstack_preload.so" ;;
-    ionstack-runner-v19-b) printf '%s\n' "$PARENT/xpad2-ionstack-poc/dist/xpad2-19-260/profiles/xpad2-v19-b/ionstack_reroot_device" ;;
-    ionstack-preload-v19-b) printf '%s\n' "$PARENT/xpad2-ionstack-poc/dist/xpad2-19-260/profiles/xpad2-v19-b/ionstack_preload.so" ;;
-    ionstack-runner-v260) printf '%s\n' "$PARENT/xpad2-ionstack-poc/dist/xpad2-19-260/profiles/xpad2-v260/ionstack_reroot_device" ;;
-    ionstack-preload-v260) printf '%s\n' "$PARENT/xpad2-ionstack-poc/dist/xpad2-19-260/profiles/xpad2-v260/ionstack_preload.so" ;;
-    ionstack-perf-target) printf '%s\n' "$PARENT/xpad2-ionstack-poc/dist/xpad2-19-260/profiles/xpad2-v260/ionstack_perf_target" ;;
-    ionstack-chainwalk-probe) printf '%s\n' "$PARENT/xpad2-ionstack-poc/dist/xpad2-19-260/profiles/xpad2-v260/cve_2026_43499_chainwalk_probe_arm32" ;;
+    ionstack-runner-v19-a) printf '%s\n' "$IONSTACK_SOURCE/dist/xpad2-19-260/profiles/xpad2-v19-a/ionstack_reroot_device" ;;
+    ionstack-preload-v19-a) printf '%s\n' "$IONSTACK_SOURCE/dist/xpad2-19-260/profiles/xpad2-v19-a/ionstack_preload.so" ;;
+    ionstack-runner-v19-b) printf '%s\n' "$IONSTACK_SOURCE/dist/xpad2-19-260/profiles/xpad2-v19-b/ionstack_reroot_device" ;;
+    ionstack-preload-v19-b) printf '%s\n' "$IONSTACK_SOURCE/dist/xpad2-19-260/profiles/xpad2-v19-b/ionstack_preload.so" ;;
+    ionstack-runner-v260) printf '%s\n' "$IONSTACK_SOURCE/dist/xpad2-19-260/profiles/xpad2-v260/ionstack_reroot_device" ;;
+    ionstack-preload-v260) printf '%s\n' "$IONSTACK_SOURCE/dist/xpad2-19-260/profiles/xpad2-v260/ionstack_preload.so" ;;
+    ionstack-perf-target) printf '%s\n' "$IONSTACK_SOURCE/dist/xpad2-19-260/profiles/xpad2-v260/ionstack_perf_target" ;;
+    ionstack-chainwalk-probe) printf '%s\n' "$IONSTACK_SOURCE/dist/xpad2-19-260/profiles/xpad2-v260/cve_2026_43499_chainwalk_probe_arm32" ;;
     ksud) printf '%s\n' "$PARENT/xpad2-ksu-lateload/artifacts/ksud-xpad2" ;;
     suu-ksud) printf '%s\n' "$PARENT/xpad2-sukisu-lateload/artifacts/ksud-sukisu-xpad2" ;;
     ksu-manager) printf '%s\n' "$PARENT/xpad2-reroot-android/app/src/main/res/raw/kernelsu_manager_v3_2_5_22_gccfee6dc_32547.apk" ;;
     suu-manager) printf '%s\n' "$PARENT/xpad2-sukisu-lateload/artifacts/SukiSU_v4.1.3_40796-release.apk" ;;
     xpad-installer) printf '%s\n' "$PARENT/xpad-installer/dist/xpad-install" ;;
-    boominstaller) printf '%s\n' "$PARENT/BoomInstaller/out/apk/BoomInstaller-v13.6.0.r21.07a5812-production.apk" ;;
+    boominstaller) printf '%s\n' "$PARENT/BoomInstaller/out/apk/BoomInstaller-v13.6.0.r23.ffa4217-production.apk" ;;
     *) return 1 ;;
   esac
 }
@@ -100,9 +101,9 @@ cp "$ROOT/README.md" "$ROOT/BEGINNER_GUIDE.md" "$ROOT/DESIGN.md" \
   "$ROOT/NOTICE.md" "$ROOT/LICENSE" "$ROOT/assets.lock.json" \
   "$ROOT/sources.lock.json" "$PACKAGE/"
 
-cp "$PARENT/xpad2-ionstack-poc/LICENSE" "$PACKAGE/licenses/xpad2-ionstack-poc-LICENSE"
-cp "$PARENT/xpad2-ionstack-poc/NOTICE" "$PACKAGE/licenses/xpad2-ionstack-poc-NOTICE"
-cp "$PARENT/xpad2-ionstack-poc/licenses/Apache-2.0.txt" \
+cp "$IONSTACK_SOURCE/LICENSE" "$PACKAGE/licenses/xpad2-ionstack-poc-LICENSE"
+cp "$IONSTACK_SOURCE/NOTICE" "$PACKAGE/licenses/xpad2-ionstack-poc-NOTICE"
+cp "$IONSTACK_SOURCE/licenses/Apache-2.0.txt" \
   "$PACKAGE/licenses/xpad2-ionstack-poc-Apache-2.0-LICENSE"
 cp "$PARENT/xpad2-ksu-lateload/LICENSE" "$PACKAGE/licenses/KernelSU-userspace-GPL-3.0-LICENSE"
 cp "$PARENT/xpad2-ksu-lateload/kernel/LICENSE" "$PACKAGE/licenses/KernelSU-kernel-GPL-2.0-LICENSE"

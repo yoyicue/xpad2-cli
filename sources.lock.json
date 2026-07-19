@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "product_version": "0.5.2",
+  "product_version": "0.5.3",
   "sources": [
     {
       "component": "ionstack",
@@ -54,8 +54,8 @@
     {
       "component": "xpad-installer",
       "repository": "https://github.com/yoyicue/xpad-installer",
-      "commit": "b9f573715f6ad12eb8093d2dc1487af58d95da4c",
-      "tag": "v0.2.10",
+      "commit": "cebbfc0a867aa0a3b92190711749b5d48e2b5db7",
+      "tag": "v0.2.13",
       "license": "GPL-3.0-only"
     },
     {
@@ -73,8 +73,8 @@
     {
       "component": "boominstaller",
       "repository": "https://github.com/yoyicue/BoomInstaller",
-      "commit": "07a5812176ee9db932dc9fd6904688a85ebf3058",
-      "tag": "v13.6.0.r21.07a5812",
+      "commit": "ffa4217a9d14451efda35b4cfdcaa4b2479cdd9f",
+      "tag": "v13.6.0.r23.ffa4217",
       "license": "Apache-2.0"
     }
   ]

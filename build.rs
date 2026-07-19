@@ -25,30 +25,33 @@ fn candidate_paths(manifest: &Path, artifact_dir: Option<&Path>, a: &Artifact) -
         paths.push(dir.join(&a.id));
     }
     let parent = manifest.parent().unwrap_or(manifest);
+    let ionstack_source = env::var_os("XPAD2_IONSTACK_SOURCE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| parent.join("xpad2-ionstack-poc"));
     let mapped = match a.id.as_str() {
-        "ionstack-runner-v19-a" => Some(parent.join(
-            "xpad2-ionstack-poc/dist/xpad2-19-260/profiles/xpad2-v19-a/ionstack_reroot_device",
+        "ionstack-runner-v19-a" => Some(ionstack_source.join(
+            "dist/xpad2-19-260/profiles/xpad2-v19-a/ionstack_reroot_device",
         )),
-        "ionstack-preload-v19-a" => Some(parent.join(
-            "xpad2-ionstack-poc/dist/xpad2-19-260/profiles/xpad2-v19-a/ionstack_preload.so",
+        "ionstack-preload-v19-a" => Some(ionstack_source.join(
+            "dist/xpad2-19-260/profiles/xpad2-v19-a/ionstack_preload.so",
         )),
-        "ionstack-runner-v19-b" => Some(parent.join(
-            "xpad2-ionstack-poc/dist/xpad2-19-260/profiles/xpad2-v19-b/ionstack_reroot_device",
+        "ionstack-runner-v19-b" => Some(ionstack_source.join(
+            "dist/xpad2-19-260/profiles/xpad2-v19-b/ionstack_reroot_device",
         )),
-        "ionstack-preload-v19-b" => Some(parent.join(
-            "xpad2-ionstack-poc/dist/xpad2-19-260/profiles/xpad2-v19-b/ionstack_preload.so",
+        "ionstack-preload-v19-b" => Some(ionstack_source.join(
+            "dist/xpad2-19-260/profiles/xpad2-v19-b/ionstack_preload.so",
         )),
-        "ionstack-runner-v260" => Some(parent.join(
-            "xpad2-ionstack-poc/dist/xpad2-19-260/profiles/xpad2-v260/ionstack_reroot_device",
+        "ionstack-runner-v260" => Some(ionstack_source.join(
+            "dist/xpad2-19-260/profiles/xpad2-v260/ionstack_reroot_device",
         )),
-        "ionstack-preload-v260" => Some(parent.join(
-            "xpad2-ionstack-poc/dist/xpad2-19-260/profiles/xpad2-v260/ionstack_preload.so",
+        "ionstack-preload-v260" => Some(ionstack_source.join(
+            "dist/xpad2-19-260/profiles/xpad2-v260/ionstack_preload.so",
         )),
         "ionstack-perf-target" => {
-            Some(parent.join("xpad2-ionstack-poc/dist/xpad2-19-260/profiles/xpad2-v260/ionstack_perf_target"))
+            Some(ionstack_source.join("dist/xpad2-19-260/profiles/xpad2-v260/ionstack_perf_target"))
         }
         "ionstack-chainwalk-probe" => {
-            Some(parent.join("xpad2-ionstack-poc/dist/xpad2-19-260/profiles/xpad2-v260/cve_2026_43499_chainwalk_probe_arm32"))
+            Some(ionstack_source.join("dist/xpad2-19-260/profiles/xpad2-v260/cve_2026_43499_chainwalk_probe_arm32"))
         }
         "ksud" => Some(parent.join("xpad2-ksu-lateload/artifacts/ksud-xpad2")),
         "suu-ksud" => {
@@ -66,7 +69,7 @@ fn candidate_paths(manifest: &Path, artifact_dir: Option<&Path>, a: &Artifact) -
         ),
         "xpad-installer" => Some(parent.join("xpad-installer/dist/xpad-install")),
         "boominstaller" => Some(
-            parent.join("BoomInstaller/out/apk/BoomInstaller-v13.6.0.r21.07a5812-production.apk"),
+            parent.join("BoomInstaller/out/apk/BoomInstaller-v13.6.0.r23.ffa4217-production.apk"),
         ),
         _ => None,
     };
@@ -79,6 +82,7 @@ fn candidate_paths(manifest: &Path, artifact_dir: Option<&Path>, a: &Artifact) -
 fn main() {
     println!("cargo:rerun-if-changed=assets.lock.json");
     println!("cargo:rerun-if-env-changed=XPAD2_ARTIFACT_DIR");
+    println!("cargo:rerun-if-env-changed=XPAD2_IONSTACK_SOURCE");
     let manifest = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let lock_path = manifest.join("assets.lock.json");
     let raw = fs::read(&lock_path).expect("read assets.lock.json");
