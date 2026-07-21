@@ -71,6 +71,15 @@ fn candidate_paths(manifest: &Path, artifact_dir: Option<&Path>, a: &Artifact) -
         "boominstaller" => Some(
             parent.join("BoomInstaller/out/apk/BoomInstaller-v13.6.0.r24.2f6e7c2-production.apk"),
         ),
+        "neozygisk-module" => {
+            Some(manifest.join(".xpad2-artifacts/NeoZygisk-v2.3-275-release.zip"))
+        }
+        "vector-module" => {
+            Some(manifest.join(".xpad2-artifacts/Vector-v2.0-3021-Release.zip"))
+        }
+        "magiskpolicy" => {
+            Some(manifest.join(".xpad2-artifacts/magiskpolicy-v30.7-arm64"))
+        }
         _ => None,
     };
     if let Some(path) = mapped {

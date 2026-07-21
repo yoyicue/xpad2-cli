@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "product_version": "0.5.4",
-  "catalog_version": "2026-07-19.2",
+  "product_version": "0.6.0",
+  "catalog_version": "2026-07-22.3",
   "profile": {
     "build_fingerprint": "alps/vnd_ls12_mt8797_wifi_64/ls12_mt8797_wifi_64:13/TP1A.220624.014/260:user/release-keys",
     "build_fingerprint_prefix": "alps/vnd_ls12_mt8797_wifi_64/ls12_mt8797_wifi_64:13/TP1A.220624.014/",
@@ -315,6 +315,48 @@
       "package": "com.yoyicue.boominstaller",
       "version_code": 24,
       "cert_sha256": "3cb5b69579d23197ced8100818a85a46b821383a504b394a44cfe3e98ade78a2"
+    },
+    {
+      "id": "neozygisk-module",
+      "filename": "NeoZygisk-v2.3-275-release.zip",
+      "kind": "internal",
+      "version": "v2.3-275-671937c",
+      "size": 3208704,
+      "sha256": "5c84df9f962c04855b3523a3a75022cf5e4f3ad3dfd94794ed92b43e911f3b9a",
+      "embedded": true,
+      "mode": 384,
+      "target": null,
+      "package": null,
+      "version_code": null,
+      "cert_sha256": null
+    },
+    {
+      "id": "vector-module",
+      "filename": "Vector-v2.0-3021-Release.zip",
+      "kind": "internal",
+      "version": "v2.0-3021-76141fed",
+      "size": 8434264,
+      "sha256": "d5e39669c02c2c699ab948eb8f3639b348eefb7749553224a9c62fa4a2f2dc18",
+      "embedded": true,
+      "mode": 384,
+      "target": null,
+      "package": null,
+      "version_code": null,
+      "cert_sha256": null
+    },
+    {
+      "id": "magiskpolicy",
+      "filename": "magiskpolicy-v30.7-arm64",
+      "kind": "internal",
+      "version": "30.7-e8a58776",
+      "size": 356584,
+      "sha256": "9837db9db475eb74b6715f081768cb6a1f2fb5a2b2ac15755686062501bace27",
+      "embedded": true,
+      "mode": 448,
+      "target": null,
+      "package": null,
+      "version_code": null,
+      "cert_sha256": null
     }
   ]
 }

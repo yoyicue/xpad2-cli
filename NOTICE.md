@@ -16,6 +16,15 @@ separate processes/files at runtime. Their exact binary and source identities ar
 - BoomInstaller control plane: Apache-2.0; its LICENSE and fork attribution/modification notice
   are included. Its separately executed embedded `xpad-installer` engine is GPL-3.0-only and
   carries the corresponding source identity and license in the APK.
+- NeoZygisk v2.3 and Vector v2.0: GPL-3.0-only. Their official module ZIPs are hash-locked
+  data. On LS12, `xpad2` applies a documented runtime compatibility adaptation: NeoZygisk uses
+  `/dev/neozygisk`, and its socket and module memfd use the existing KernelSU `ksu_file`
+  context. The legacy 4.19 KSU `SET_SEPOLICY` UAPI returns `EOPNOTSUPP`, so the broad upstream
+  `sepolicy.rule` files remain quarantined.
+- MagiskPolicy v30.7: GPL-3.0-only, extracted unchanged from the official Magisk v30.7 APK and
+  hash-locked as a separately executed ARM64 binary. `xpad2` uses it only to load the verified
+  minimal `system_server self:process execmem` rule required by Vector, and removes that rule
+  when hooks are disabled. No built-in Magisk policy bundle is applied.
 - Rust dependencies retain their own licenses. The release package contains an inventory and
   the license files collected from the exact crate sources selected by `Cargo.lock`.
 

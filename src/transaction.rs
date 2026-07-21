@@ -1,6 +1,7 @@
 use crate::catalog::Catalog;
 use crate::device;
 use crate::error::{Error, Result, msg, needs_reboot};
+use crate::hooks;
 use crate::install;
 use crate::logging::TransactionLog;
 use crate::model::{ComponentState, Receipt};
@@ -27,6 +28,8 @@ const SUU_FULL: &[&str] = &[
 const COMPONENT_ORDER: &[&str] = &[
     "ksu",
     "suu",
+    "zygisk",
+    "lsposed",
     "xpad-installer",
     "installer-backup",
     "ksu-manager",
@@ -95,6 +98,44 @@ pub fn install_components(catalog: &Catalog, paths: &Paths, requested: &[String]
                 root_session.as_ref().expect("root session initialized"),
                 &mut log,
             )?;
+        }
+        let mut hook_changed = false;
+        for hook in ["zygisk", "lsposed"] {
+            if components.iter().any(|id| id == hook) {
+                hook_changed |= hooks::install_component(
+                    catalog,
+                    paths,
+                    hook,
+                    root_session
+                        .as_ref()
+                        .ok_or_else(|| msg("hook installation has no KernelSU root session"))?,
+                    &mut log,
+                )?;
+            }
+        }
+        if hook_changed {
+            let root = root_session
+                .as_ref()
+                .ok_or_else(|| msg("hook activation has no root session"))?;
+            hooks::activate(catalog, paths, root, &mut log)?;
+            if root.owned {
+                // activate() restores Enforcing before Zygote starts but keeps
+                // the temporary su as a recovery transport until Vector has
+                // passed strict health checks. Reassert and verify that state
+                // immediately before releasing the temporary su.
+                root.restore_enforcing(&mut log)?;
+                for hook in ["zygisk", "lsposed"] {
+                    if components.iter().any(|id| id == hook) {
+                        let state = hooks::status(hook);
+                        if state.state != ComponentState::Active {
+                            return Err(msg(format!(
+                                "{hook} failed after restoring SELinux Enforcing: {}",
+                                state.detail.unwrap_or_default()
+                            )));
+                        }
+                    }
+                }
+            }
         }
         if components
             .iter()
@@ -207,6 +248,17 @@ pub fn install_components(catalog: &Catalog, paths: &Paths, requested: &[String]
             )));
         }
     }
+    for hook in ["zygisk", "lsposed"] {
+        if result.is_ok() && components.iter().any(|id| id == hook) {
+            let state = hooks::status(hook);
+            if state.state != ComponentState::Active {
+                result = Err(msg(format!(
+                    "final {hook} activation verification failed: {}",
+                    state.detail.unwrap_or_default()
+                )));
+            }
+        }
+    }
     if result.is_ok()
         && root_session.as_ref().is_some_and(|root| root.owned)
         && selinux() != "Enforcing"
@@ -267,6 +319,12 @@ fn normalize(requested: &[String]) -> Result<Vec<String>> {
             return Err(msg(format!("unknown built-in component: {id}")));
         }
     }
+    if selected.contains("lsposed") {
+        selected.insert("zygisk".to_string());
+    }
+    if selected.contains("zygisk") {
+        selected.insert("ksu".to_string());
+    }
     if selected.contains("ksu") && selected.contains("suu") {
         return Err(msg(
             "ksu and suu are mutually exclusive in one boot; choose full or suu-full",
@@ -326,5 +384,21 @@ mod tests {
         let error =
             normalize(&["ksu".to_string(), "suu".to_string()]).expect_err("runtime mix must fail");
         assert!(error.to_string().contains("mutually exclusive"));
+    }
+
+    #[test]
+    fn zygisk_adds_the_tested_kernelsu_dependency() {
+        assert_eq!(
+            normalize(&["zygisk".to_string()]).expect("normalize zygisk"),
+            vec!["ksu", "zygisk"]
+        );
+    }
+
+    #[test]
+    fn lsposed_adds_zygisk_and_kernelsu_in_order() {
+        assert_eq!(
+            normalize(&["lsposed".to_string()]).expect("normalize lsposed"),
+            vec!["ksu", "zygisk", "lsposed"]
+        );
     }
 }

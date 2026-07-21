@@ -24,6 +24,7 @@ const PERF_TARGET: &str = "/data/local/tmp/ionstack_perf_target";
 const PRELOAD: &str = "/data/local/tmp/ionstack_preload.so";
 const PROBE: &str = "/data/local/tmp/cve43499_chainwalk_probe_arm32";
 pub const SU: &str = "/data/local/tmp/su";
+const PERSISTENT_SU: &str = "/system/bin/su";
 const SOCKET: &str = "/data/local/tmp/temp_su.sock";
 const DAEMON_LOG: &str = "/data/local/tmp/su_daemon.log";
 
@@ -243,6 +244,42 @@ impl RootSession {
         root_exec(command)
     }
 
+    pub fn restore_enforcing(&self, log: &mut TransactionLog) -> Result<()> {
+        self.check_boot()?;
+        if selinux() == "Enforcing" {
+            log.event(
+                "selinux",
+                "already-enforcing",
+                json!({"before_root_release": true}),
+            )?;
+            return Ok(());
+        }
+        let output = self.exec("setenforce 1")?;
+        log.command_result(
+            "restore SELinux Enforcing",
+            output.status == 0,
+            &output.text,
+        )?;
+        if output.status != 0 {
+            return Err(needs_reboot(format!(
+                "cannot restore SELinux Enforcing before root release: {}",
+                output.text
+            )));
+        }
+        thread::sleep(Duration::from_millis(250));
+        if selinux() != "Enforcing" {
+            return Err(needs_reboot(
+                "SELinux did not become Enforcing before root release",
+            ));
+        }
+        log.event(
+            "selinux",
+            "enforcing-restored",
+            json!({"before_root_release": true}),
+        )?;
+        Ok(())
+    }
+
     pub fn close(&self, log: &mut TransactionLog) -> Result<()> {
         if !self.owned {
             log.event(
@@ -291,7 +328,20 @@ pub fn root_exec(command: &str) -> Result<RootCommandOutput> {
         "{command}\n__xpad2_rc=$?\nprintf '\\n{}%d\\n' \"$__xpad2_rc\"",
         marker
     );
-    let output = run(SU, &["-c", &wrapped])?;
+    let output = if device::ksu_module_loaded() && Path::new(PERSISTENT_SU).exists() {
+        // Once late-load succeeds, prefer KernelSU's u:r:ksu:s0 transport.
+        // IonStack's temporary client remains u:r:shell:s0 after Enforcing is
+        // restored: it is still a recovery channel, but SELinux prevents it
+        // from managing /data/adb. RootSession::close later uses this KSU
+        // transport to retire the temporary daemon and client safely.
+        run(PERSISTENT_SU, &["0", "sh", "-c", &wrapped])?
+    } else if Path::new(SU).is_file() {
+        run(SU, &["-c", &wrapped])?
+    } else {
+        return Err(msg(
+            "no verified root transport is available (temporary su absent and KernelSU inactive)",
+        ));
+    };
     let text = output_text(&output);
     let mut rc = None;
     let mut clean = Vec::new();

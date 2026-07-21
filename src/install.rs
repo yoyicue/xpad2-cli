@@ -15,6 +15,10 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant};
 
+const KSUD_CONTROL_PLANE: &str = "/data/adb/ksud";
+const KSUD_READY_DEADLINE: Duration = Duration::from_secs(15);
+const KSUD_READY_POLL: Duration = Duration::from_millis(250);
+
 pub fn install_locked_cli(
     catalog: &Catalog,
     paths: &Paths,
@@ -163,6 +167,7 @@ pub fn ensure_runtime(
     atomic_write(&diagnostic, &bytes, 0o700)?;
     let before = device::runtime_status(paths, spec);
     if before.state == ComponentState::Active {
+        wait_runtime_control_plane(root, spec, log)?;
         log.event(
             "component",
             "skipped",
@@ -240,6 +245,7 @@ pub fn ensure_runtime(
             spec.display_name
         )));
     }
+    wait_runtime_control_plane(root, spec, log)?;
     log.event(
         "component",
         "active",
@@ -250,6 +256,57 @@ pub fn ensure_runtime(
         spec.id, spec.display_name, spec.version
     );
     Ok(true)
+}
+
+fn wait_runtime_control_plane(
+    root: &RootSession,
+    spec: &device::RuntimeSpec,
+    log: &mut TransactionLog,
+) -> Result<()> {
+    log.event(
+        "component",
+        "control-plane-waiting",
+        json!({
+            "id": spec.id,
+            "probe": "ksud module list",
+            "deadline_seconds": KSUD_READY_DEADLINE.as_secs(),
+        }),
+    )?;
+    let started = Instant::now();
+    let deadline = started + KSUD_READY_DEADLINE;
+    let mut attempts = 0u32;
+    loop {
+        root.check_boot()?;
+        attempts += 1;
+        let command = format!("{} module list", shell_quote(KSUD_CONTROL_PLANE));
+        let output = root.exec(&command)?;
+        if output.status == 0 {
+            log.event(
+                "component",
+                "control-plane-ready",
+                json!({
+                    "id": spec.id,
+                    "probe": "ksud module list",
+                    "attempts": attempts,
+                    "elapsed_ms": started.elapsed().as_millis(),
+                }),
+            )?;
+            return Ok(());
+        }
+        let last_failure = if output.text.trim().is_empty() {
+            format!("exit {} with no output", output.status)
+        } else {
+            format!("exit {}: {}", output.status, output.text.trim())
+        };
+        if Instant::now() >= deadline {
+            return Err(msg(format!(
+                "{} is active but its ksud control plane did not become ready within {} seconds after {attempts} probes ({last_failure})",
+                spec.display_name,
+                KSUD_READY_DEADLINE.as_secs(),
+            )));
+        }
+        thread::sleep(KSUD_READY_POLL);
+    }
 }
 
 pub fn install_locked_apk(

@@ -69,6 +69,9 @@ source_for() {
     suu-manager) printf '%s\n' "$PARENT/xpad2-sukisu-lateload/artifacts/SukiSU_v4.1.3_40796-release.apk" ;;
     xpad-installer) printf '%s\n' "$PARENT/xpad-installer/dist/xpad-install" ;;
     boominstaller) printf '%s\n' "$PARENT/BoomInstaller/out/apk/BoomInstaller-v13.6.0.r24.2f6e7c2-production.apk" ;;
+    neozygisk-module) printf '%s\n' "$ROOT/.xpad2-artifacts/NeoZygisk-v2.3-275-release.zip" ;;
+    vector-module) printf '%s\n' "$ROOT/.xpad2-artifacts/Vector-v2.0-3021-Release.zip" ;;
+    magiskpolicy) printf '%s\n' "$ROOT/.xpad2-artifacts/magiskpolicy-v30.7-arm64" ;;
     *) return 1 ;;
   esac
 }
@@ -112,6 +115,9 @@ cp "$PARENT/xpad2-sukisu-lateload/kernel/LICENSE" "$PACKAGE/licenses/SukiSU-kern
 cp "$PARENT/xpad-installer/LICENSE" "$PACKAGE/licenses/xpad-installer-LICENSE"
 cp "$PARENT/BoomInstaller/LICENSE" "$PACKAGE/licenses/BoomInstaller-LICENSE"
 cp "$PARENT/BoomInstaller/NOTICE.md" "$PACKAGE/licenses/BoomInstaller-NOTICE.md"
+cp "$ROOT/LICENSE" "$PACKAGE/licenses/NeoZygisk-GPL-3.0-LICENSE"
+cp "$ROOT/LICENSE" "$PACKAGE/licenses/Vector-GPL-3.0-LICENSE"
+cp "$ROOT/LICENSE" "$PACKAGE/licenses/MagiskPolicy-GPL-3.0-LICENSE"
 "$ROOT/tools/collect_rust_licenses.sh" "$PACKAGE/licenses" \
   "$PACKAGE/licenses/BoomInstaller-LICENSE"
 

@@ -3,6 +3,7 @@ mod catalog;
 mod device;
 mod embedded;
 mod error;
+mod hooks;
 mod install;
 mod logging;
 mod model;
@@ -61,6 +62,7 @@ fn run_main() -> Result<()> {
         "freeze" => command_freeze(&catalog, &paths, &args[1..])?,
         "unfreeze" => command_unfreeze(&catalog, &paths, &args[1..])?,
         "install" => command_install(&catalog, &paths, &args[1..])?,
+        "hooks" => command_hooks(&catalog, &paths, &args[1..])?,
         "repair" => command_repair(&catalog, &paths, &args[1..])?,
         "cleanup" => command_cleanup(&catalog, &paths)?,
         "logs" => command_logs(&catalog, &paths, &args[1..])?,
@@ -149,6 +151,8 @@ fn command_list(catalog: &Catalog) {
     println!("ota              policy   freeze supported XPad2 system OTA package for user 0");
     println!("ksu              runtime  KernelSU 32547 / UAPI 2 / current boot");
     println!("suu              runtime  SukiSU Ultra 40796 / current boot");
+    println!("zygisk           module   NeoZygisk v2.3 / LS12 Zygote injection");
+    println!("lsposed          module   Vector v2.0 / generic system bridge runtime");
     println!("installer-backup policy   managed 0044 device-OEM fallback installer");
     for id in [
         "ksu-manager",
@@ -203,6 +207,13 @@ fn command_info(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<()>
         render_component(&device::installer_backup_status(
             catalog.artifact("xpad-installer")?,
         ));
+        return Ok(());
+    }
+    if matches!(id.as_str(), "zygisk" | "lsposed") {
+        println!(
+            "id: {id}\nkind: KernelSU module\nactivation: xpad2 hooks activate\nlifecycle: current KSU late-load boot"
+        );
+        render_component(&hooks::status(id));
         return Ok(());
     }
     let artifact = catalog.artifact(id)?;
@@ -312,6 +323,7 @@ fn command_verify(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<(
             "ota" => state.state == ComponentState::Active,
             "boominstaller" => state.state == ComponentState::Active,
             "installer-backup" => state.state == ComponentState::Active,
+            "zygisk" | "lsposed" => state.state == ComponentState::Active,
             _ => state.state == ComponentState::Installed,
         };
         if !healthy {
@@ -402,6 +414,29 @@ fn command_install(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<
         "cli" => install_arbitrary_cli(catalog, paths, &args[1..]),
         "apk" => install_arbitrary_apk(catalog, paths, &args[1..]),
         _ => transaction::install_components(catalog, paths, args),
+    }
+}
+
+fn command_hooks(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<()> {
+    if args.len() != 1 || !matches!(args[0].as_str(), "activate" | "disable") {
+        return Err(msg("usage: xpad2 hooks activate|disable"));
+    }
+    let operation = format!("hooks {}", args[0]);
+    if args[0] == "activate" {
+        simple_transaction(paths, &operation, |log| {
+            device::product_check(catalog)?;
+            let root = root::RootSession {
+                owned: false,
+                started_boot_id: boot_id(),
+            };
+            hooks::activate(catalog, paths, &root, log)
+        })
+    } else {
+        simple_transaction(paths, &operation, |log| {
+            device::product_check(catalog)?;
+            hooks::disable(log)
+        })?;
+        hooks::dispatch_soft_reboot()
     }
 }
 
@@ -667,8 +702,8 @@ fn yes_no(value: bool) -> &'static str {
 fn print_help() {
     println!(
         "xpad2 {} - XPad2 signed installer; IonStack Root on fingerprint /19–/260\n\n\
-Usage:\n  xpad2 status [--json]\n  xpad2 doctor\n  xpad2 list | info COMPONENT\n  xpad2 update [--check] [--version VERSION] [--offline DIRECTORY_OR_ZIP]\n  xpad2 root [-- COMMAND ARG...]\n  xpad2 freeze ota | unfreeze ota\n  xpad2 install [COMPONENT...]             # default: full (KSU)\n  xpad2 install cli FILE [--name NAME]\n  xpad2 install apk FILE\n  xpad2 verify [COMPONENT]\n  xpad2 repair COMPONENT\n  xpad2 cleanup\n  xpad2 logs export DIRECTORY\n  xpad2 cache path|list|verify|import DIRECTORY|prune|clear\n\n\
-Built-ins: ota, ksu, suu, ksu-manager, suu-manager, xpad-installer, installer-backup, boominstaller, full, suu-full\n\
+Usage:\n  xpad2 status [--json]\n  xpad2 doctor\n  xpad2 list | info COMPONENT\n  xpad2 update [--check] [--version VERSION] [--offline DIRECTORY_OR_ZIP]\n  xpad2 root [-- COMMAND ARG...]\n  xpad2 freeze ota | unfreeze ota\n  xpad2 install [COMPONENT...]             # default: full (KSU)\n  xpad2 install cli FILE [--name NAME]\n  xpad2 install apk FILE\n  xpad2 hooks activate|disable\n  xpad2 verify [COMPONENT]\n  xpad2 repair COMPONENT\n  xpad2 cleanup\n  xpad2 logs export DIRECTORY\n  xpad2 cache path|list|verify|import DIRECTORY|prune|clear\n\n\
+Built-ins: ota, ksu, suu, zygisk, lsposed, ksu-manager, suu-manager, xpad-installer, installer-backup, boominstaller, full, suu-full\n\
 Global: --cache-dir DIRECTORY (or XPAD2_CACHE_DIR)\n\n\
 Self-update: --reinstall repairs the same version; a downgrade also requires --allow-downgrade.\n\n\
 Exit 75 means an ordinary reboot is required.",

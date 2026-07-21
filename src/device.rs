@@ -1,6 +1,7 @@
 use crate::apk;
 use crate::catalog::Catalog;
 use crate::error::{IoContext, Result, msg};
+use crate::hooks;
 use crate::model::{Artifact, ComponentState, ComponentStatus, DeviceStatus};
 use crate::ota;
 use crate::util::{
@@ -753,10 +754,13 @@ pub fn snapshot(catalog: &Catalog, paths: &Paths) -> DeviceStatus {
     let supported = catalog
         .lock
         .matches_technical_runtime(&fingerprint, &kernel, &abi);
-    let mut components = Vec::new();
-    components.push(ota::status());
-    components.push(ksu_status(paths));
-    components.push(suu_status(paths));
+    let mut components = vec![
+        ota::status(),
+        ksu_status(paths),
+        suu_status(paths),
+        hooks::zygisk_status(),
+        hooks::lsposed_status(),
+    ];
     if let Ok(artifact) = catalog.artifact("ksu-manager") {
         components.push(apk_status(artifact));
     }
@@ -781,6 +785,15 @@ pub fn snapshot(catalog: &Catalog, paths: &Paths) -> DeviceStatus {
             )
         })
         .or_else(|| transaction_warnings.first().cloned());
+    let action_required = action_required.or_else(|| {
+        components
+            .iter()
+            .find(|component| {
+                matches!(component.id.as_str(), "zygisk" | "lsposed")
+                    && component.state == ComponentState::Ready
+            })
+            .map(|_| "run `xpad2 hooks activate` for the staged hook modules".to_string())
+    });
     DeviceStatus {
         product_version: env!("CARGO_PKG_VERSION").to_string(),
         product_supported,

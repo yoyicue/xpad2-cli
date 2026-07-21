@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "product_version": "0.5.4",
+  "product_version": "0.6.0",
   "sources": [
     {
       "component": "ionstack",
@@ -76,6 +76,35 @@
       "commit": "2f6e7c21f11d4b7de42f321547f632cc560af239",
       "tag": "v13.6.0.r24.2f6e7c2",
       "license": "Apache-2.0"
+    },
+    {
+      "component": "neozygisk-module",
+      "repository": "https://github.com/JingMatrix/NeoZygisk",
+      "version": "v2.3 (275)",
+      "commit": "671937c8f0a67623986b19a0d7a1f495e61942ad",
+      "tag": "v2.3",
+      "artifact": "NeoZygisk-v2.3-275-release.zip",
+      "version_code": 275,
+      "license": "GPL-3.0-only"
+    },
+    {
+      "component": "vector-module",
+      "repository": "https://github.com/JingMatrix/Vector",
+      "version": "v2.0 (3021)",
+      "commit": "76141fed151f49b818144d54f2ebb6ab9a2df11c",
+      "tag": "v2.0",
+      "artifact": "Vector-v2.0-3021-Release.zip",
+      "version_code": 3021,
+      "license": "GPL-3.0-only"
+    },
+    {
+      "component": "magiskpolicy",
+      "repository": "https://github.com/topjohnwu/Magisk",
+      "version": "v30.7",
+      "commit": "e8a58776f1d7bdf852072ad0baa6eceb9a1e4aac",
+      "tag": "v30.7",
+      "artifact": "Magisk-v30.7.apk!/lib/arm64-v8a/libmagiskpolicy.so",
+      "license": "GPL-3.0-only"
     }
   ]
 }

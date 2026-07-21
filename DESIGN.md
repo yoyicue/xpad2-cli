@@ -1,6 +1,6 @@
 # XPad2 CLI 设计
 
-状态：v0.5.4 已实现；v0.1.1 完成 BoomInstaller 依赖身份和公开分发材料，v0.1.2
+状态：v0.6.0 已实现；v0.1.1 完成 BoomInstaller 依赖身份和公开分发材料，v0.1.2
 增加可验证的 OTA 冻结策略与 Root 前强制门禁，v0.1.3 对齐 KernelSU 驱动与
 官方生产签名 Manager 的 32547 构建号，v0.1.4 升级 late-load v0.2.1，恢复
 `u:r:ksu:s0` Manager Root 且保持全局 SELinux Enforcing；v0.1.5 将 BoomInstaller
@@ -59,6 +59,13 @@ ADB-shell 路径继续使用受管 0044，31317 仍只允许修复 0044，不接
 v0.5.4 锁定 xpad-installer v0.2.14 与 BoomInstaller r24：APK 与 DEX 暂存改用每次事务
 唯一文件名并在成功或失败后清理，历史只读残留不再导致下一次 0044 安装以 staging I/O
 错误提前退出；错误仍保留机器可读的 artifact、path 与 errno 供远程诊断。
+v0.6.0 增加真机验证的 KSU + NeoZygisk v2.3 + Vector v2.0 链路：Neo socket 与模块
+memfd 复用 `ksu_file`，锁定的官方 MagiskPolicy v30.7 只加载 system_server self execmem
+最小规则；Vector Bridge 在 Enforcing SELinux 下完成验收。显式 Hook
+安装事务在 live rule 写入后恢复 Enforcing，但保留临时 su 到 Bridge 验活之后才释放。
+v0.6.0 发布修订收敛 CLI 职责：移除具体应用进程与业务 Hook 日志观察，Vector 健康状态只验证
+通用 Zygisk、lspd、system_server Bridge 和最小 live policy，不携带或修改应用 Hook，
+不管理应用 scope。
 
 验收覆盖单 ELF、只读状态探针、3-worker IonStack 临时 Root、KSU/SUU late-load、
 CLI/APK 身份验证、临时 Root 安全收口、同 boot 幂等重跑、普通重启后恢复、RSA 签名
@@ -395,7 +402,8 @@ xpad2 logs export DIRECTORY
 5. 安装并验签所选 runtime 对应的官方 Manager；SUU 必须在模块注册前固定 Manager 身份
 6. 如果所选 runtime 已健康加载，跳过临时 Root 和 late-load
 7. 否则在 OTA 已冻结的前提下通过 IonStack POC 获取临时 Root
-8. late-load 锁定版本的 KSU 或 SUU；另一 runtime 已驻留时要求普通重启
+8. late-load 锁定版本的 KSU 或 SUU；验证完整 runtime 身份，并以实际 `ksud module list`
+   成功作为控制面就绪栅栏；另一 runtime 已驻留时要求普通重启
 9. 部署并验证 xpad-install CLI
 10. 幂等收敛正式 0044 anchor，并验证 attribution 与本机 OEM installer UID
 11. 安装 BoomInstaller APK
@@ -414,6 +422,8 @@ xpad2 logs export DIRECTORY
 - 任一步失败后仍优先执行 SELinux 和临时 Root 收尾。
 - 如果 runtime 已经成功加载、后续 APK 安装失败，记录部分成功；重跑时从状态探针继续。
 - 如果另一 runtime 已加载或当前模块身份不健康，停止并要求普通重启，不尝试在线切换。
+- runtime 驻留后切换到 `u:r:ksu:s0` 的 `/system/bin/su` 执行后续特权命令；IonStack 临时
+  Root 仅保留为恢复通道，直到 Enforcing 下的最终验活完成。
 - IonStack 六轮 holder 机会耗尽后停止，明确建议普通重启，不无限重试。
 - Boot ID 在危险阶段发生变化时，事务立即判为失败，不把重启后的旧文件当作成功现场。
 
@@ -747,7 +757,7 @@ licenses/
 完全一致，不能成为第二条版本线。固定名 update manifest 和 delta index 供 Latest Release
 发现；delta 只优化传输，不是独立版本线或信任根。
 
-## 14. v0.5.4 验收标准
+## 14. v0.6.0 验收标准
 
 1. 单个 `xpad2` ELF 可以被推送到 `/data/local/tmp` 并正常执行。
 2. `status` 和 `doctor` 不进行 Root 或持久修改。
@@ -824,3 +834,19 @@ licenses/
 48. xpad-install 与 BoomInstaller 的 APK/DEX 暂存文件逐事务唯一；旧固定名只读残留、
     并发事务或上次中断不会阻断新事务，staging I/O 失败明确返回 artifact/path/errno 且
     Windows 工具不会误导用户重启。
+49. `install zygisk`/`install lsposed` 只使用锁定的 NeoZygisk v2.3、Vector v2.0 和
+    MagiskPolicy v30.7 ARM64 制品；大小、SHA-256、来源 commit/tag 与许可证均可追溯。
+50. 旧 KSU `SET_SEPOLICY` 返回 `EOPNOTSUPP` 时，不把空成功当作已应用；MagiskPolicy
+    live load 后 policy 哈希变化且精确读回 system_server self execmem，未应用内置 Magisk
+    规则或 Vector 上游宽泛 `allow *`。
+51. NeoZygisk 新 daemon 的每个 `memfd:zygisk-module` 在 system_server fork 前重标为
+    `u:object_r:ksu_file:s0:c0`；状态探针同时验证 Zygote maps、单实例 daemon 和 memfd 标签。
+52. Vector system_server 自动重试为 0；策略或 FD 传递失败不会形成 Zygote/system_server
+    重启风暴，90 秒严格验活失败返回明确诊断。
+53. Vector Active 必须同时满足 lspd 单实例、Neo 模块注册、配置数据库、live rule、当前
+    system_server 的模块 maps 与带当前 PID 的 Bridge 注入日志，不能以 daemon 存活冒充。
+54. `/260` 真机在 SELinux Enforcing 下记录 Vector framework 注入 system_server；CLI
+    不包含具体应用包名、应用 Hook 载荷、scope 管理或业务日志验收条件。
+55. IonStack 创建的临时 su 在显式 Hook 安装中保留到 Vector 验活；live rule 写入后先
+    恢复 Enforcing，临时 su 只作为恢复通道，Bridge 必须在 Enforcing 下启动。验活后关闭
+    daemon/socket/client；`hooks disable` 移除最小 live rule 后只做 userspace soft-reboot。
