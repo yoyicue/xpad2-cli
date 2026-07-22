@@ -1,6 +1,6 @@
 # XPad2 CLI 设计
 
-状态：v0.6.0 已实现；v0.1.1 完成 BoomInstaller 依赖身份和公开分发材料，v0.1.2
+状态：v0.6.1 已实现；v0.1.1 完成 BoomInstaller 依赖身份和公开分发材料，v0.1.2
 增加可验证的 OTA 冻结策略与 Root 前强制门禁，v0.1.3 对齐 KernelSU 驱动与
 官方生产签名 Manager 的 32547 构建号，v0.1.4 升级 late-load v0.2.1，恢复
 `u:r:ksu:s0` Manager Root 且保持全局 SELinux Enforcing；v0.1.5 将 BoomInstaller
@@ -66,6 +66,9 @@ memfd 复用 `ksu_file`，锁定的官方 MagiskPolicy v30.7 只加载 system_se
 v0.6.0 发布修订收敛 CLI 职责：移除具体应用进程与业务 Hook 日志观察，Vector 健康状态只验证
 通用 Zygisk、lspd、system_server Bridge 和最小 live policy，不携带或修改应用 Hook，
 不管理应用 scope。
+v0.6.1 将显式选择的 SUU runtime 保留到 NeoZygisk/Vector 安装计划；未显式选择 runtime 的
+`install zygisk`/`install lsposed` 仍默认 KSU。两台 `/260` 真机分别完成 KSU 与 SUU
+late-load、Enforcing soft-reboot 和 Vector Bridge 严格验活。
 
 验收覆盖单 ELF、只读状态探针、3-worker IonStack 临时 Root、KSU/SUU late-load、
 CLI/APK 身份验证、临时 Root 安全收口、同 boot 幂等重跑、普通重启后恢复、RSA 签名
@@ -338,6 +341,10 @@ xpad2 install ksu
 xpad2 install suu
 xpad2 install ksu-manager
 xpad2 install suu-manager
+xpad2 install zygisk
+xpad2 install lsposed
+xpad2 install suu zygisk
+xpad2 install suu lsposed
 xpad2 install xpad-installer
 xpad2 install boominstaller
 xpad2 install full
@@ -351,7 +358,9 @@ xpad2 install ksu ksu-manager boominstaller
 ```
 
 `full` 固定选择 KSU，`suu-full` 固定选择 SukiSU Ultra。`ksu` 与 `suu` 同一 boot
-互斥；请求混合两者必须在计划阶段失败，运行时切换必须先普通重启。
+互斥；请求混合两者必须在计划阶段失败，运行时切换必须先普通重启。单独请求
+`zygisk`/`lsposed` 默认补入 KSU；同一请求已经显式选择 `suu` 时必须保留 SUU，不能
+再隐式混入 KSU。
 
 ### 4.5 任意本地制品
 
@@ -757,7 +766,7 @@ licenses/
 完全一致，不能成为第二条版本线。固定名 update manifest 和 delta index 供 Latest Release
 发现；delta 只优化传输，不是独立版本线或信任根。
 
-## 14. v0.6.0 验收标准
+## 14. v0.6.1 验收标准
 
 1. 单个 `xpad2` ELF 可以被推送到 `/data/local/tmp` 并正常执行。
 2. `status` 和 `doctor` 不进行 Root 或持久修改。
@@ -850,3 +859,6 @@ licenses/
 55. IonStack 创建的临时 su 在显式 Hook 安装中保留到 Vector 验活；live rule 写入后先
     恢复 Enforcing，临时 su 只作为恢复通道，Bridge 必须在 Enforcing 下启动。验活后关闭
     daemon/socket/client；`hooks disable` 移除最小 live rule 后只做 userspace soft-reboot。
+56. `install zygisk`/`install lsposed` 未显式选择 runtime 时保持 KSU 默认值；显式
+    `install suu zygisk`/`install suu lsposed` 只激活 SUU 40796，KSU 必须保持非活动。
+    两条路径都在 Enforcing 下通过 NeoZygisk 与 Vector Bridge 严格验活。

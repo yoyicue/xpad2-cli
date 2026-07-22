@@ -322,7 +322,7 @@ fn normalize(requested: &[String]) -> Result<Vec<String>> {
     if selected.contains("lsposed") {
         selected.insert("zygisk".to_string());
     }
-    if selected.contains("zygisk") {
+    if selected.contains("zygisk") && !selected.contains("ksu") && !selected.contains("suu") {
         selected.insert("ksu".to_string());
     }
     if selected.contains("ksu") && selected.contains("suu") {
@@ -399,6 +399,22 @@ mod tests {
         assert_eq!(
             normalize(&["lsposed".to_string()]).expect("normalize lsposed"),
             vec!["ksu", "zygisk", "lsposed"]
+        );
+    }
+
+    #[test]
+    fn explicit_sukisu_runtime_is_preserved_for_zygisk() {
+        assert_eq!(
+            normalize(&["suu".to_string(), "zygisk".to_string()]).expect("normalize suu zygisk"),
+            vec!["suu", "zygisk"]
+        );
+    }
+
+    #[test]
+    fn explicit_sukisu_runtime_is_preserved_for_lsposed() {
+        assert_eq!(
+            normalize(&["suu".to_string(), "lsposed".to_string()]).expect("normalize suu lsposed"),
+            vec!["suu", "zygisk", "lsposed"]
         );
     }
 }
