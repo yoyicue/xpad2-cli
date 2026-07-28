@@ -23,10 +23,10 @@ const ZYGISK_MODULE: &str = "zygisksu";
 const ZYGISK_VERSION_CODE: &str = "275";
 const ZYGISK_MARKER: &str = "xpad2-ls12-compat";
 
-const LSPOSED_ARTIFACT: &str = "vector-module";
-const LSPOSED_MODULE: &str = "zygisk_vector";
-const LSPOSED_VERSION_CODE: &str = "3021";
-const LSPOSED_MARKER: &str = "xpad2-ls12-compat";
+const VECTOR_ARTIFACT: &str = "vector-module";
+const VECTOR_MODULE: &str = "zygisk_vector";
+const VECTOR_VERSION_CODE: &str = "3021";
+const VECTOR_MARKER: &str = "xpad2-ls12-compat";
 
 const STOCK_ZYGISK_CONTEXT: &[u8] = b"u:object_r:zygisk_file:s0";
 const LS12_ZYGISK_CONTEXT: &[u8] = b"u:object_r:ksu_file:s0:c0";
@@ -46,11 +46,11 @@ const ZYGISK: HookSpec = HookSpec {
     version_code: ZYGISK_VERSION_CODE,
 };
 
-const LSPOSED: HookSpec = HookSpec {
-    id: "lsposed",
-    artifact: LSPOSED_ARTIFACT,
-    module: LSPOSED_MODULE,
-    version_code: LSPOSED_VERSION_CODE,
+const VECTOR: HookSpec = HookSpec {
+    id: "vector",
+    artifact: VECTOR_ARTIFACT,
+    module: VECTOR_MODULE,
+    version_code: VECTOR_VERSION_CODE,
 };
 
 struct ModuleInfo {
@@ -59,10 +59,17 @@ struct ModuleInfo {
     version_code: String,
 }
 
-pub fn status(id: &str) -> ComponentStatus {
+pub fn canonical_id(id: &str) -> &str {
     match id {
+        "lsposed" => "vector",
+        other => other,
+    }
+}
+
+pub fn status(id: &str) -> ComponentStatus {
+    match canonical_id(id) {
         "zygisk" => zygisk_status(),
-        "lsposed" => lsposed_status(),
+        "vector" => vector_status(),
         _ => component_status(id, ComponentState::Absent, Some("unknown hook component")),
     }
 }
@@ -180,48 +187,48 @@ printf 'XPAD2_ZYGISK_HEALTH enforcing=%s monitor=%s zygote=%s daemon=%s monitor_
     }
 }
 
-pub fn lsposed_status() -> ComponentStatus {
+pub fn vector_status() -> ComponentStatus {
     if !device::ksu_module_loaded() {
         return component_status(
-            LSPOSED.id,
+            VECTOR.id,
             ComponentState::Absent,
             Some("KernelSU is not loaded in this boot"),
         );
     }
-    match lsposed_status_inner() {
+    match vector_status_inner() {
         Ok(state) => state,
         Err(error) => component_status(
-            LSPOSED.id,
+            VECTOR.id,
             ComponentState::Broken,
             Some(&format!("cannot verify Vector: {error}")),
         ),
     }
 }
 
-fn lsposed_status_inner() -> Result<ComponentStatus> {
-    let Some(module) = module_info(LSPOSED.module)? else {
-        return Ok(component_status(LSPOSED.id, ComponentState::Absent, None));
+fn vector_status_inner() -> Result<ComponentStatus> {
+    let Some(module) = module_info(VECTOR.module)? else {
+        return Ok(component_status(VECTOR.id, ComponentState::Absent, None));
     };
-    if module.version_code != LSPOSED.version_code {
+    if module.version_code != VECTOR.version_code {
         return Ok(component_status(
-            LSPOSED.id,
+            VECTOR.id,
             ComponentState::Outdated,
             Some(&format!(
                 "module versionCode={} expected={}",
-                module.version_code, LSPOSED.version_code
+                module.version_code, VECTOR.version_code
             )),
         ));
     }
     if module.update {
         return Ok(component_status(
-            LSPOSED.id,
+            VECTOR.id,
             ComponentState::Ready,
             Some("Vector is staged; run `xpad2 hooks activate`"),
         ));
     }
     if !module.enabled {
         return Ok(component_status(
-            LSPOSED.id,
+            VECTOR.id,
             ComponentState::Installed,
             Some("Vector is installed but disabled"),
         ));
@@ -229,7 +236,7 @@ fn lsposed_status_inner() -> Result<ComponentStatus> {
     let zygisk = zygisk_status_inner()?;
     if zygisk.state != ComponentState::Active {
         return Ok(component_status(
-            LSPOSED.id,
+            VECTOR.id,
             if zygisk.state == ComponentState::Ready {
                 ComponentState::Ready
             } else {
@@ -269,7 +276,7 @@ verbose=$(ls -1t /data/adb/lspd/log/verbose_* 2>/dev/null | head -n 1)
 if [ -n "$verbose" ] && [ -n "$system_pid" ]; then
   grep -Eq ": *$system_pid:.*Injected Vector framework into system_server" "$verbose" 2>/dev/null && bridge=ok
 fi
-printf 'XPAD2_LSPOSED_HEALTH enforcing=%s compat=%s lspd_count=%s registered=%s database=%s policy=%s system_map=%s bridge=%s\n' \
+printf 'XPAD2_VECTOR_HEALTH enforcing=%s compat=%s lspd_count=%s registered=%s database=%s policy=%s system_map=%s bridge=%s\n' \
   "$enforcing" "$compat" "$lspd_count" "$registered" "$database" "$policy" "$system_map" "$bridge"
 [ "$compat" = ok ] && [ "$lspd_count" = 1 ] && [ "$registered" = ok ] && \
   [ "$database" = ok ] && [ "$policy" = ok ] && [ "$system_map" = ok ] && \
@@ -279,10 +286,10 @@ printf 'XPAD2_LSPOSED_HEALTH enforcing=%s compat=%s lspd_count=%s registered=%s 
     if health.status == 0
         && health
             .text
-            .contains("XPAD2_LSPOSED_HEALTH enforcing=ok compat=ok")
+            .contains("XPAD2_VECTOR_HEALTH enforcing=ok compat=ok")
     {
         Ok(component_status(
-            LSPOSED.id,
+            VECTOR.id,
             ComponentState::Active,
             Some(&format!(
                 "Vector v2.0 bridge active under Enforcing SELinux; {}",
@@ -291,7 +298,7 @@ printf 'XPAD2_LSPOSED_HEALTH enforcing=%s compat=%s lspd_count=%s registered=%s 
         ))
     } else {
         Ok(component_status(
-            LSPOSED.id,
+            VECTOR.id,
             ComponentState::Broken,
             Some(&format!("strict health check failed: {}", health.text)),
         ))
@@ -305,9 +312,9 @@ pub fn install_component(
     root: &RootSession,
     log: &mut TransactionLog,
 ) -> Result<bool> {
-    let spec = match id {
+    let spec = match canonical_id(id) {
         "zygisk" => ZYGISK,
-        "lsposed" => LSPOSED,
+        "vector" => VECTOR,
         _ => return Err(msg(format!("unknown hook component: {id}"))),
     };
     root.check_boot()?;
@@ -353,7 +360,7 @@ pub fn install_component(
     let stage = format!("{KSU_MODULES_UPDATE}/{}", spec.module);
     match spec.id {
         "zygisk" => patch_zygisk(paths, root, &stage)?,
-        "lsposed" => patch_lsposed(paths, root, &stage)?,
+        "vector" => patch_vector(paths, root, &stage)?,
         _ => unreachable!(),
     }
     let enable = root.exec(&format!("{} module enable {}", KSUD, spec.module))?;
@@ -514,7 +521,7 @@ fn patch_zygisk_post_fs_data(text: &str) -> Result<String> {
     Ok(patched)
 }
 
-fn patch_lsposed(paths: &Paths, root: &RootSession, stage: &str) -> Result<()> {
+fn patch_vector(paths: &Paths, root: &RootSession, stage: &str) -> Result<()> {
     let remote = format!("{stage}/service.sh");
     let local = paths.work.join("vector-service.sh");
     copy_from_root(root, &remote, &local)?;
@@ -550,8 +557,8 @@ fn patch_lsposed(paths: &Paths, root: &RootSession, stage: &str) -> Result<()> {
         paths,
         root,
         stage,
-        LSPOSED_MARKER,
-        "component=lsposed\nupstream=Vector-v2.0-3021\nmode=system-server-bridge\nsystem_server=true\ndex2oat=false\npolicy=minimal-live-system-server-execmem\n",
+        VECTOR_MARKER,
+        "component=vector\nupstream=Vector-v2.0-3021\nmode=system-server-bridge\nsystem_server=true\ndex2oat=false\npolicy=minimal-live-system-server-execmem\n",
     )
 }
 
@@ -682,18 +689,18 @@ fn prepare_activation(log: &mut TransactionLog) -> Result<Vec<String>> {
         )));
     }
     let mut components = vec!["zygisk".to_string()];
-    let lsposed = lsposed_status();
-    if lsposed.state != ComponentState::Absent {
+    let vector = vector_status();
+    if vector.state != ComponentState::Absent {
         if !matches!(
-            lsposed.state,
+            vector.state,
             ComponentState::Installed | ComponentState::Ready | ComponentState::Active
         ) {
             return Err(msg(format!(
                 "Vector is not activation-ready: {}",
-                lsposed.detail.unwrap_or_default()
+                vector.detail.unwrap_or_default()
             )));
         }
-        components.push("lsposed".to_string());
+        components.push("vector".to_string());
     }
     log.event(
         "hooks",
@@ -781,7 +788,7 @@ pub fn activate(
     root.check_boot()?;
     let components = prepare_activation(log)?;
     install_policy_tool(catalog, paths, root, log)?;
-    if components.iter().any(|id| id == LSPOSED.id) {
+    if components.iter().any(|id| id == VECTOR.id) {
         apply_live_policy(root, log)?;
     }
     if root.owned {
@@ -835,15 +842,15 @@ rm -f /data/local/tmp/xpad2-neo-memfd.log
         let zygisk = zygisk_status();
         let vector = components
             .iter()
-            .any(|id| id == LSPOSED.id)
-            .then(lsposed_status);
+            .any(|id| id == VECTOR.id)
+            .then(vector_status);
         let ready = zygisk.state == ComponentState::Active
             && vector
                 .as_ref()
                 .is_none_or(|status| status.state == ComponentState::Active);
         let health = match &vector {
             Some(vector) => format!(
-                "zygisk={} {}; lsposed={} {}",
+                "zygisk={} {}; vector={} {}",
                 zygisk.state,
                 zygisk.detail.unwrap_or_default(),
                 vector.state,
@@ -873,7 +880,7 @@ pub fn dispatch_soft_reboot() -> Result<()> {
     println!(
         "已调度 Android userspace soft-reboot；ADB 会短暂断开，Boot ID 与 KSU 内核模块保持不变。"
     );
-    println!("设备恢复后运行：xpad2 verify zygisk；若安装了 Vector，再运行 xpad2 verify lsposed。");
+    println!("设备恢复后运行：xpad2 verify zygisk；若安装了 Vector，再运行 xpad2 verify vector。");
     std::io::stdout()
         .flush()
         .map_err(|error| msg(format!("cannot flush activation instructions: {error}")))?;
@@ -912,7 +919,7 @@ pkill -9 zygiskd64 2>/dev/null || true
     if output.status != 0 {
         return Err(msg(format!("cannot disable hook modules: {}", output.text)));
     }
-    Ok(vec!["zygisk".to_string(), "lsposed".to_string()])
+    Ok(vec!["zygisk".to_string(), "vector".to_string()])
 }
 
 fn module_info(id: &str) -> Result<Option<ModuleInfo>> {
@@ -970,6 +977,12 @@ fn component_status(id: &str, state: ComponentState, detail: Option<&str>) -> Co
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_lsposed_id_is_a_vector_alias() {
+        assert_eq!(canonical_id("vector"), "vector");
+        assert_eq!(canonical_id("lsposed"), "vector");
+    }
 
     #[test]
     fn zygisk_context_patch_is_length_preserving_and_idempotent() {

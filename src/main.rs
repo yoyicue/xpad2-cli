@@ -154,7 +154,8 @@ fn command_list(catalog: &Catalog) {
     println!("ksu              runtime  KernelSU 32547 / UAPI 2 / current boot");
     println!("suu              runtime  SukiSU Ultra 40796 / current boot");
     println!("zygisk           module   NeoZygisk v2.3 / LS12 Zygote injection");
-    println!("lsposed          module   Vector v2.0 / generic system bridge runtime");
+    println!("vector           module   Vector v2.0 / generic system bridge runtime");
+    println!("lsposed          alias    compatibility alias for vector");
     println!("installer-backup policy   managed 0044 device-OEM fallback installer");
     for id in [
         "ksu-manager",
@@ -179,7 +180,7 @@ fn command_info(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<()>
     if args.len() != 1 {
         return Err(msg("usage: xpad2 info COMPONENT"));
     }
-    let id = &args[0];
+    let id = hooks::canonical_id(&args[0]);
     if id == "ota" {
         println!(
             "id: ota\nkind: policy\npackages: {}\nlifecycle: persistent until `xpad2 unfreeze ota`",
@@ -211,7 +212,7 @@ fn command_info(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<()>
         ));
         return Ok(());
     }
-    if matches!(id.as_str(), "zygisk" | "lsposed") {
+    if matches!(id, "zygisk" | "vector") {
         println!(
             "id: {id}\nkind: KernelSU module\nactivation: xpad2 hooks activate\nlifecycle: current KSU late-load boot"
         );
@@ -325,7 +326,7 @@ fn command_verify(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<(
             "ota" => state.state == ComponentState::Active,
             "boominstaller" => state.state == ComponentState::Active,
             "installer-backup" => state.state == ComponentState::Active,
-            "zygisk" | "lsposed" => state.state == ComponentState::Active,
+            "zygisk" | "vector" => state.state == ComponentState::Active,
             _ => state.state == ComponentState::Installed,
         };
         if !healthy {
@@ -706,7 +707,8 @@ fn print_help() {
     println!(
         "xpad2 {} - XPad2-family signed installer and IonStack launcher\n\n\
 Usage:\n  xpad2 status [--json]\n  xpad2 doctor\n  xpad2 list | info COMPONENT\n  xpad2 update [--check] [--version VERSION] [--offline DIRECTORY_OR_ZIP]\n  xpad2 root [-- COMMAND ARG...]\n  xpad2 freeze ota | unfreeze ota\n  xpad2 install [COMPONENT...]             # default: full (KSU)\n  xpad2 install cli FILE [--name NAME]\n  xpad2 install apk FILE\n  xpad2 hooks activate|disable\n  xpad2 verify [COMPONENT]\n  xpad2 repair COMPONENT\n  xpad2 cleanup\n  xpad2 logs export DIRECTORY\n  xpad2 cache path|list|verify|import DIRECTORY|prune|clear\n\n\
-Built-ins: ota, ksu, suu, zygisk, lsposed, ksu-manager, suu-manager, xpad-installer, installer-backup, boominstaller, full, suu-full\n\
+Built-ins: ota, ksu, suu, zygisk, vector, ksu-manager, suu-manager, xpad-installer, installer-backup, boominstaller, full, suu-full\n\
+Compatibility alias: lsposed -> vector\n\
 Global: --cache-dir DIRECTORY (or XPAD2_CACHE_DIR)\n\n\
 Self-update: --reinstall repairs the same version; a downgrade also requires --allow-downgrade.\n\n\
 Exit 75 means an ordinary reboot is required.",

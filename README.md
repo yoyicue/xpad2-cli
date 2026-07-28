@@ -96,22 +96,23 @@ LS14 静态门禁的 SukiSU Ultra 40796、官方 `com.sukisu.ultra` Manager v4.1
 组合，其余 installer、0044 backup 和 BoomInstaller 保持相同。`ksu` 与 `suu` 共用
 `kernelsu` 模块名，同一 boot 只能选择一个；切换必须先普通重启。
 
-### NeoZygisk / Vector（LSPosed）
+### NeoZygisk / Vector
 
 Hook 运行时保持显式 opt-in，不进入默认 `full`。未显式选择 runtime 时继续默认 KSU；
 v0.6.1 起同时支持已经真机验证的显式 SUU 路径：
 
 ```sh
 xpad2 install zygisk          # 自动包含 ksu
-xpad2 install lsposed         # 自动包含 ksu + zygisk
+xpad2 install vector          # 自动包含 ksu + zygisk
 xpad2 install suu zygisk      # 显式选择 SUU + NeoZygisk
-xpad2 install suu lsposed     # 显式选择 SUU + NeoZygisk + Vector
+xpad2 install suu vector      # 显式选择 SUU + NeoZygisk + Vector
 xpad2 hooks activate          # 已安装模块的重新激活/修复入口
 xpad2 verify zygisk
-xpad2 verify lsposed
+xpad2 verify vector
 ```
 
-`install zygisk/lsposed` 会在未选择 runtime 时补入 KSU；若同一请求已经显式选择 SUU，
+Vector 是实际锁定和安装的上游制品；旧命令名 `lsposed` 仅作为 `vector` 的兼容别名保留。
+`install zygisk/vector` 会在未选择 runtime 时补入 KSU；若同一请求已经显式选择 SUU，
 则保持 SUU 且不会再混入 KSU。两条路径都会在同一事务内自动完成 userspace soft-reboot
 和严格验活。若该
 事务通过 IonStack 创建了临时 Root，live rule 写入后会先恢复 SELinux Enforcing，但保留
@@ -174,7 +175,7 @@ xpad2 root [-- COMMAND ARG...]
 xpad2 freeze ota
 xpad2 unfreeze ota
 xpad2 install                              # 默认 full / KernelSU
-xpad2 install ksu|suu|zygisk|lsposed|ksu-manager|suu-manager|xpad-installer|installer-backup|boominstaller ...
+xpad2 install ksu|suu|zygisk|vector|ksu-manager|suu-manager|xpad-installer|installer-backup|boominstaller ...
 xpad2 install full|suu-full
 xpad2 install cli FILE [--name NAME]
 xpad2 install apk FILE

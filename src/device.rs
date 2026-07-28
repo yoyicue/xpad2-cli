@@ -765,7 +765,7 @@ pub fn snapshot(catalog: &Catalog, paths: &Paths) -> DeviceStatus {
         ksu_status(paths),
         suu_status(paths),
         hooks::zygisk_status(),
-        hooks::lsposed_status(),
+        hooks::vector_status(),
     ];
     if let Ok(artifact) = catalog.artifact("ksu-manager") {
         components.push(apk_status(artifact));
@@ -795,7 +795,7 @@ pub fn snapshot(catalog: &Catalog, paths: &Paths) -> DeviceStatus {
         components
             .iter()
             .find(|component| {
-                matches!(component.id.as_str(), "zygisk" | "lsposed")
+                matches!(component.id.as_str(), "zygisk" | "vector")
                     && component.state == ComponentState::Ready
             })
             .map(|_| "run `xpad2 hooks activate` for the staged hook modules".to_string())
@@ -881,10 +881,11 @@ pub fn component<'a>(snapshot: &'a DeviceStatus, id: &str) -> Option<&'a Compone
     if id == "temporary-root" {
         Some(&snapshot.temporary_root)
     } else {
+        let canonical_id = hooks::canonical_id(id);
         snapshot
             .components
             .iter()
-            .find(|component| component.id == id)
+            .find(|component| component.id == canonical_id)
     }
 }
 

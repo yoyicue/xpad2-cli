@@ -29,7 +29,7 @@ const COMPONENT_ORDER: &[&str] = &[
     "ksu",
     "suu",
     "zygisk",
-    "lsposed",
+    "vector",
     "xpad-installer",
     "installer-backup",
     "ksu-manager",
@@ -64,10 +64,7 @@ pub fn install_components(catalog: &Catalog, paths: &Paths, requested: &[String]
             Some("suu") if components.iter().any(|id| id == "suu-manager") => Some("suu-manager"),
             _ => None,
         };
-        if components
-            .iter()
-            .any(|id| id == "zygisk" || id == "lsposed")
-        {
+        if components.iter().any(|id| id == "zygisk" || id == "vector") {
             device::hook_profile_check(catalog)?;
         }
 
@@ -106,7 +103,7 @@ pub fn install_components(catalog: &Catalog, paths: &Paths, requested: &[String]
             )?;
         }
         let mut hook_changed = false;
-        for hook in ["zygisk", "lsposed"] {
+        for hook in ["zygisk", "vector"] {
             if components.iter().any(|id| id == hook) {
                 hook_changed |= hooks::install_component(
                     catalog,
@@ -130,7 +127,7 @@ pub fn install_components(catalog: &Catalog, paths: &Paths, requested: &[String]
                 // passed strict health checks. Reassert and verify that state
                 // immediately before releasing the temporary su.
                 root.restore_enforcing(&mut log)?;
-                for hook in ["zygisk", "lsposed"] {
+                for hook in ["zygisk", "vector"] {
                     if components.iter().any(|id| id == hook) {
                         let state = hooks::status(hook);
                         if state.state != ComponentState::Active {
@@ -254,7 +251,7 @@ pub fn install_components(catalog: &Catalog, paths: &Paths, requested: &[String]
             )));
         }
     }
-    for hook in ["zygisk", "lsposed"] {
+    for hook in ["zygisk", "vector"] {
         if result.is_ok() && components.iter().any(|id| id == hook) {
             let state = hooks::status(hook);
             if state.state != ComponentState::Active {
@@ -310,22 +307,23 @@ pub fn install_components(catalog: &Catalog, paths: &Paths, requested: &[String]
 fn normalize(requested: &[String]) -> Result<Vec<String>> {
     let mut selected = BTreeSet::new();
     let default = ["full".to_string()];
-    for id in if requested.is_empty() {
+    for requested_id in if requested.is_empty() {
         &default[..]
     } else {
         requested
     } {
+        let id = hooks::canonical_id(requested_id);
         if id == "full" {
             selected.extend(FULL.iter().map(|id| id.to_string()));
         } else if id == "suu-full" {
             selected.extend(SUU_FULL.iter().map(|id| id.to_string()));
-        } else if COMPONENT_ORDER.contains(&id.as_str()) {
-            selected.insert(id.clone());
+        } else if COMPONENT_ORDER.contains(&id) {
+            selected.insert(id.to_string());
         } else {
             return Err(msg(format!("unknown built-in component: {id}")));
         }
     }
-    if selected.contains("lsposed") {
+    if selected.contains("vector") {
         selected.insert("zygisk".to_string());
     }
     if selected.contains("zygisk") && !selected.contains("ksu") && !selected.contains("suu") {
@@ -401,10 +399,10 @@ mod tests {
     }
 
     #[test]
-    fn lsposed_adds_zygisk_and_kernelsu_in_order() {
+    fn vector_adds_zygisk_and_kernelsu_in_order() {
         assert_eq!(
-            normalize(&["lsposed".to_string()]).expect("normalize lsposed"),
-            vec!["ksu", "zygisk", "lsposed"]
+            normalize(&["vector".to_string()]).expect("normalize vector"),
+            vec!["ksu", "zygisk", "vector"]
         );
     }
 
@@ -417,10 +415,19 @@ mod tests {
     }
 
     #[test]
-    fn explicit_sukisu_runtime_is_preserved_for_lsposed() {
+    fn explicit_sukisu_runtime_is_preserved_for_vector() {
         assert_eq!(
-            normalize(&["suu".to_string(), "lsposed".to_string()]).expect("normalize suu lsposed"),
-            vec!["suu", "zygisk", "lsposed"]
+            normalize(&["suu".to_string(), "vector".to_string()]).expect("normalize suu vector"),
+            vec!["suu", "zygisk", "vector"]
+        );
+    }
+
+    #[test]
+    fn legacy_lsposed_alias_normalizes_to_vector() {
+        assert_eq!(
+            normalize(&["suu".to_string(), "lsposed".to_string()])
+                .expect("normalize legacy suu lsposed"),
+            vec!["suu", "zygisk", "vector"]
         );
     }
 }

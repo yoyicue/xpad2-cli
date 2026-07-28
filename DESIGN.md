@@ -67,8 +67,10 @@ v0.6.0 发布修订收敛 CLI 职责：移除具体应用进程与业务 Hook �
 通用 Zygisk、lspd、system_server Bridge 和最小 live policy，不携带或修改应用 Hook，
 不管理应用 scope。
 v0.6.1 将显式选择的 SUU runtime 保留到 NeoZygisk/Vector 安装计划；未显式选择 runtime 的
-`install zygisk`/`install lsposed` 仍默认 KSU。两台 `/260` 真机分别完成 KSU 与 SUU
+`install zygisk`/`install vector` 仍默认 KSU。两台 `/260` 真机分别完成 KSU 与 SUU
 late-load、Enforcing soft-reboot 和 Vector Bridge 严格验活。
+当前 CLI 使用实际上游制品名 `vector` 作为规范组件 ID；历史命令 `lsposed` 只在输入边界
+归一化为 `vector`，状态、日志和新事务回执不再把 Vector 标成 LSPosed。
 v0.7.0 增加 LS12/PD2 与 LS14/PD2P 的统一 IonStack launcher。设备选择同时绑定
 `ro.product.device`、完整 fingerprint、kernel release 和 ABI；exact kernel build 与
 动态 offset discovery 都只能在选定设备族内部选择 payload。PD2 和 PD2P controller/
@@ -356,9 +358,9 @@ xpad2 install suu
 xpad2 install ksu-manager
 xpad2 install suu-manager
 xpad2 install zygisk
-xpad2 install lsposed
+xpad2 install vector
 xpad2 install suu zygisk
-xpad2 install suu lsposed
+xpad2 install suu vector
 xpad2 install xpad-installer
 xpad2 install boominstaller
 xpad2 install full
@@ -373,7 +375,7 @@ xpad2 install ksu ksu-manager boominstaller
 
 `full` 固定选择 KSU，`suu-full` 固定选择 SukiSU Ultra。`ksu` 与 `suu` 同一 boot
 互斥；请求混合两者必须在计划阶段失败，运行时切换必须先普通重启。单独请求
-`zygisk`/`lsposed` 默认补入 KSU；同一请求已经显式选择 `suu` 时必须保留 SUU，不能
+`zygisk`/`vector` 默认补入 KSU；同一请求已经显式选择 `suu` 时必须保留 SUU，不能
 再隐式混入 KSU。
 
 ### 4.5 任意本地制品
@@ -859,7 +861,7 @@ licenses/
 48. xpad-install 与 BoomInstaller 的 APK/DEX 暂存文件逐事务唯一；旧固定名只读残留、
     并发事务或上次中断不会阻断新事务，staging I/O 失败明确返回 artifact/path/errno 且
     Windows 工具不会误导用户重启。
-49. `install zygisk`/`install lsposed` 只使用锁定的 NeoZygisk v2.3、Vector v2.0 和
+49. `install zygisk`/`install vector` 只使用锁定的 NeoZygisk v2.3、Vector v2.0 和
     MagiskPolicy v30.7 ARM64 制品；大小、SHA-256、来源 commit/tag 与许可证均可追溯。
 50. 旧 KSU `SET_SEPOLICY` 返回 `EOPNOTSUPP` 时，不把空成功当作已应用；MagiskPolicy
     live load 后 policy 哈希变化且精确读回 system_server self execmem，未应用内置 Magisk
@@ -875,6 +877,6 @@ licenses/
 55. IonStack 创建的临时 su 在显式 Hook 安装中保留到 Vector 验活；live rule 写入后先
     恢复 Enforcing，临时 su 只作为恢复通道，Bridge 必须在 Enforcing 下启动。验活后关闭
     daemon/socket/client；`hooks disable` 移除最小 live rule 后只做 userspace soft-reboot。
-56. `install zygisk`/`install lsposed` 未显式选择 runtime 时保持 KSU 默认值；显式
-    `install suu zygisk`/`install suu lsposed` 只激活 SUU 40796，KSU 必须保持非活动。
+56. `install zygisk`/`install vector` 未显式选择 runtime 时保持 KSU 默认值；显式
+    `install suu zygisk`/`install suu vector` 只激活 SUU 40796，KSU 必须保持非活动。
     两条路径都在 Enforcing 下通过 NeoZygisk 与 Vector Bridge 严格验活。
