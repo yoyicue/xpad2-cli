@@ -10,27 +10,31 @@
 - 一台电脑（Windows、macOS 或 Linux）；
 - 一根能传数据的 USB 线；
 - 电脑已经安装 Android Platform Tools，终端里能运行 `adb`；
-- Pad 已开启 USB 调试，fingerprint 属于下述 XPad2 产品族；如需 Root，incremental 还要
-  位于 `/19`–`/260`；
+- Pad 已开启 USB 调试，fingerprint 属于下述 XPad2 产品族；如需 Root，LS12 incremental
+  要位于 `/19`–`/260`，LS14 要位于 `/19`–`/272`；
 - Pad 中的重要数据已有备份，设备是你本人所有或已经获得明确授权。
 
 IonStack Root 只支持下面这个签名固件范围：
 
 ```text
-alps/vnd_ls12_mt8797_wifi_64/ls12_mt8797_wifi_64:13/TP1A.220624.014/<19..260>:user/release-keys
+PD2:  alps/vnd_ls12_mt8797_wifi_64/ls12_mt8797_wifi_64:13/TP1A.220624.014/<19..260>:user/release-keys
+PD2P: alps/vnd_ls14_mt8797_wifi_64/ls14_mt8797_wifi_64:13/TP1A.220624.014/<19..272>:user/release-keys
 ```
 
-其中 `<19..260>` 表示 canonical 十进制闭区间，不是字面文本。产品族门固定设备和构建
-前缀、`:user/release-keys` 后缀、canonical 数字 incremental 及 arm64 ABI；Root 门再
-要求 `/19`–`/260` 和内核 `4.19.191`。V231227 的 `/1703659196` 可以使用更新、OTA、
-安装器和 Manager，但不能执行 Root/KSU/SUU/full。
+尖括号表示 canonical 十进制闭区间，不是字面文本。程序会同时核对
+`ro.product.device`、完整 fingerprint、arm64 ABI 和 `4.19.191` 内核，然后自动选择
+LS12 或 LS14 的隔离 payload。PD2P 的 KSU/SUU 与 Hook 制品已经通过 /262、/272
+发布静态门禁；预检选型成功后，`ksu`、`suu`、`full`、`suu-full` 会自动继续，加载后
+仍必须通过严格运行时验活。
 
-以下三种精确 `uname -v` 会直接走快速路径：
+以下五种精确 `uname -v` 会直接走快速路径：
 
 ```text
 #1 SMP PREEMPT Tue Aug 13 02:06:24 CST 2024   (xpad2-v19-a)
 #1 SMP PREEMPT Mon Dec 16 23:29:13 CST 2024   (xpad2-v19-b)
 #1 SMP PREEMPT Mon Jun 29 04:08:29 CST 2026   (xpad2-v260)
+#1 SMP PREEMPT Mon Jun 29 05:28:07 CST 2026   (xpad2p /262)
+#1 SMP PREEMPT Thu Jul 23 20:38:25 CST 2026   (xpad2p /272)
 ```
 
 范围内的其他 `uname -v` 不会在入口被拒绝。Root 时程序先运行只读 discovery；只有
@@ -78,30 +82,30 @@ adb shell /data/local/tmp/xpad2 version
 手工恢复；恢复文件必须来自 GitHub Latest，不能照搬历史 tag 内的旧指南。
 
 当前正式版本是
-[`v0.5.4`](https://github.com/yoyicue/xpad2-cli/releases/tag/v0.5.4)。只需要下载：
+[`v0.7.0`](https://github.com/yoyicue/xpad2-cli/releases/tag/v0.7.0)。只需要下载：
 
 ```text
-xpad2-v0.5.4-android-arm64
+xpad2-v0.7.0-android-arm64
 ```
 
 macOS 或 Linux 可以直接执行：
 
 ```sh
-curl -fLO https://github.com/yoyicue/xpad2-cli/releases/download/v0.5.4/xpad2-v0.5.4-android-arm64
-shasum -a 256 xpad2-v0.5.4-android-arm64
+curl -fLO https://github.com/yoyicue/xpad2-cli/releases/download/v0.7.0/xpad2-v0.7.0-android-arm64
+shasum -a 256 xpad2-v0.7.0-android-arm64
 ```
 
 Windows PowerShell 可以执行：
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/yoyicue/xpad2-cli/releases/download/v0.5.4/xpad2-v0.5.4-android-arm64" -OutFile "xpad2-v0.5.4-android-arm64"
-Get-FileHash .\xpad2-v0.5.4-android-arm64 -Algorithm SHA256
+Invoke-WebRequest -Uri "https://github.com/yoyicue/xpad2-cli/releases/download/v0.7.0/xpad2-v0.7.0-android-arm64" -OutFile "xpad2-v0.7.0-android-arm64"
+Get-FileHash .\xpad2-v0.7.0-android-arm64 -Algorithm SHA256
 ```
 
 正确的 SHA-256 是：
 
 ```text
-807489eabb141bcfa2be617d324cadf6d414e0bebb274cc787bc8d277bf0f9d5
+34e714e17ac737dbf059ea13907865666641e6ef538179ff34955fd085861be9
 ```
 
 哈希不一致时不要继续，重新下载文件。
@@ -111,7 +115,7 @@ Get-FileHash .\xpad2-v0.5.4-android-arm64 -Algorithm SHA256
 本节仅适用于首次安装或损坏恢复。在下载文件所在目录执行：
 
 ```sh
-adb push xpad2-v0.5.4-android-arm64 /data/local/tmp/xpad2
+adb push xpad2-v0.7.0-android-arm64 /data/local/tmp/xpad2
 adb shell chmod 700 /data/local/tmp/xpad2
 adb shell /data/local/tmp/xpad2 version
 ```
@@ -119,7 +123,7 @@ adb shell /data/local/tmp/xpad2 version
 最后一条命令应显示：
 
 ```text
-xpad2 0.5.4 (catalog 2026-07-19.2)
+xpad2 0.7.0 (catalog 2026-07-28.1)
 ```
 
 这就表示 `xpad2` 已经安装到了：
@@ -347,7 +351,7 @@ adb shell rm /data/local/tmp/xpad2-update-vX.Y.Z.zip
 ```
 
 如果当前仍是 v0.1.x，或设备不是精确 `/260` 且当前 xpad2 早于 v0.5.0，需要先按
-第 3–4 节手工覆盖到当前 v0.5.4 一次；旧 updater 的精确 `/260` 门禁无法自行跨入
+第 3–4 节手工覆盖到当前 v0.7.0 一次；旧 updater 的精确 `/260` 门禁无法自行跨入
 新的 fingerprint 范围。
 
 ## 常见问题

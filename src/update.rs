@@ -966,8 +966,13 @@ fn validate_target_profile(manifest: &UpdateManifest, catalog: &Catalog) -> Resu
     }
     profile.fingerprint_policy().validate()?;
     let fingerprint = getprop("ro.build.fingerprint");
+    let product_device = getprop("ro.product.device");
     let abi = getprop("ro.product.cpu.abi");
-    if !catalog.lock.matches_product_device(&fingerprint, &abi) {
+    if catalog
+        .lock
+        .selected_product_profile(&fingerprint, &product_device, &abi)
+        .is_none()
+    {
         return Err(msg(
             "current device does not match the signed XPad2 product family",
         ));
@@ -2577,6 +2582,8 @@ mod tests {
     #[test]
     fn catalog_profile_projection_stays_legacy_updater_compatible() {
         let source = DeviceProfile {
+            id: "xpad2".to_string(),
+            product_device: "ls12_mt8797_wifi_64".to_string(),
             build_fingerprint: "prefix/260:suffix".to_string(),
             build_fingerprint_prefix: "prefix/".to_string(),
             build_fingerprint_suffix: ":suffix".to_string(),
@@ -2585,6 +2592,8 @@ mod tests {
             kernel_release_prefix: "4.19".to_string(),
             kernel_version: "exact kernel build".to_string(),
             abi: "arm64-v8a".to_string(),
+            late_load_supported: true,
+            hooks_supported: true,
         };
         let converted = profile_from_catalog(&source);
         assert_eq!(converted.build_fingerprint, source.build_fingerprint);

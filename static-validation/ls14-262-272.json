@@ -1,0 +1,99 @@
+{
+  "schema": 1,
+  "kind": "xpad2-ls14-static-validation",
+  "status": "pass",
+  "validated_at": "2026-07-28",
+  "profiles": [
+    {
+      "device_profile_id": "xpad2",
+      "product_device": "ls12_mt8797_wifi_64",
+      "fingerprint_incremental": 260,
+      "kernel_version": "#1 SMP PREEMPT Mon Jun 29 04:08:29 CST 2026",
+      "boot_sha256": "b9160ac6adc83a497cc8d577ce31c6d8c17b4c7a7f44ef409957502102da9a49",
+      "kernel_sha256": "c8062e36bca1d23322cb9cae57b53c1fd693553b36ce772b2575864a4a69fad9",
+      "config_sha256": "851849fa49dc2330c6484bdabc7221dcb3c349832eb9c57bcd49aaf1ef53eb7e",
+      "absolute_kallsyms_sha256": "7d9ff5afbc1840105cc244bdec776e21ae36d9894e961c473c0ccc2b70e3d735"
+    },
+    {
+      "device_profile_id": "xpad2p",
+      "product_device": "ls14_mt8797_wifi_64",
+      "fingerprint_incremental": 262,
+      "kernel_version": "#1 SMP PREEMPT Mon Jun 29 05:28:07 CST 2026",
+      "boot_sha256": "052cbf3eb2a4a467a3f703d83dafc70c0ad3ff514f23ce4491f0eb467e31518a",
+      "kernel_sha256": "5b454b94269548fec55f1af88d62e0691eea82d29322c783b86b99dd003a80d9",
+      "config_sha256": "2dbf45bdee84e90ab6ef175c37e9b3012a56cce2b4ebed2202c99adf87cd7a7a",
+      "absolute_kallsyms_sha256": "803944810551138e867b150e0afab7fcf56fb4740fefa6285073ace3c3bf2b17"
+    },
+    {
+      "device_profile_id": "xpad2p",
+      "product_device": "ls14_mt8797_wifi_64",
+      "fingerprint_incremental": 272,
+      "kernel_version": "#1 SMP PREEMPT Thu Jul 23 20:38:25 CST 2026",
+      "boot_sha256": "d274230dd883e7ab0ee03d374ad43f4f1912d6fac9336b62afa17e9ae5467ffe",
+      "kernel_sha256": "dd739d48d7f9d65a9b364c358db01135c3469e33ed0e39536cddc4741ae3a865",
+      "config_sha256": "2dbf45bdee84e90ab6ef175c37e9b3012a56cce2b4ebed2202c99adf87cd7a7a",
+      "absolute_kallsyms_sha256": "803944810551138e867b150e0afab7fcf56fb4740fefa6285073ace3c3bf2b17"
+    }
+  ],
+  "kernel_modules": {
+    "ksu": {
+      "artifact_id": "ksu-module",
+      "sha256": "e930a6929c6cd156f394e6b15bed2258b19205cc17fa3410db7f68cef7b8fb21",
+      "vermagic": "4.19.191 SMP preempt mod_unload modversions aarch64",
+      "module_layout_crc_le": "bfc5a373",
+      "undefined_imports": 137,
+      "missing_imports": 0
+    },
+    "suu": {
+      "artifact_id": "suu-module",
+      "sha256": "5835dbed566e9711fab02c3b729e6dce495b996481af53c474f2be4816e7fd81",
+      "vermagic": "4.19.191 SMP preempt mod_unload modversions aarch64",
+      "module_layout_crc_le": "bfc5a373",
+      "undefined_imports": 141,
+      "missing_imports": 0
+    }
+  },
+  "hook_artifacts": {
+    "neozygisk": {
+      "artifact_id": "neozygisk-module",
+      "sha256": "5c84df9f962c04855b3523a3a75022cf5e4f3ad3dfd94794ed92b43e911f3b9a",
+      "architecture": "aarch64",
+      "patch_anchor_count": 1
+    },
+    "vector": {
+      "artifact_id": "vector-module",
+      "sha256": "d5e39669c02c2c699ab948eb8f3639b348eefb7749553224a9c62fa4a2f2dc18",
+      "architecture": "aarch64",
+      "patch_anchor_count": 1
+    }
+  },
+  "checks": {
+    "ls14_262_272_config_identical": true,
+    "ls14_262_272_absolute_kallsyms_identical": true,
+    "abi_critical_kernel_config_equal_to_ls12": true,
+    "module_layout_crc_unique_in_all_kernels": true,
+    "ls14_imported_symbol_addresses_identical": true,
+    "android_release": "13",
+    "android_sdk": 33,
+    "zygote_mode": "zygote64_32",
+    "byte_identical_hook_core_files": 9,
+    "hook_core_set": [
+      "app_process64",
+      "libandroid_runtime.so",
+      "libbinder.so",
+      "libart.so",
+      "libartbase.so",
+      "libnativebridge.so",
+      "libnativeloader.so",
+      "libc.so",
+      "linker64"
+    ]
+  },
+  "runtime_requirements": [
+    "exact fingerprint and kernel tuple or two independent offset anchors",
+    "IonStack preflight and validate in the same Boot ID",
+    "locked artifact SHA-256 verification",
+    "post-load KSU/SUU identity and control-plane health verification",
+    "Hook activation under SELinux Enforcing with strict health checks and disable-on-failure"
+  ]
+}

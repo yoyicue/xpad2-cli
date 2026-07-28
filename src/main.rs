@@ -125,7 +125,9 @@ fn command_status(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<(
         );
         println!("boot-id: {}", status.boot_id);
         println!(
-            "profile: fingerprint_incremental={} kernel={} kernel_build={}",
+            "profile: family={} product_device={} fingerprint_incremental={} kernel={} kernel_build={}",
+            status.device_profile.as_deref().unwrap_or("unmatched"),
+            status.product_device,
             status
                 .fingerprint_incremental
                 .map(|value| format!("/{value}"))
@@ -238,7 +240,7 @@ fn command_doctor(catalog: &Catalog, paths: &Paths) -> Result<()> {
         }
     );
     println!(
-        "[{}] IonStack Root profile: canonical fingerprint /19–/260 + 4.19.191",
+        "[{}] IonStack Root profile: signed device-family fingerprint range + 4.19.191",
         if snapshot.supported { "OK" } else { "WARN" }
     );
     println!(
@@ -425,6 +427,7 @@ fn command_hooks(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<()
     if args[0] == "activate" {
         simple_transaction(paths, &operation, |log| {
             device::product_check(catalog)?;
+            device::hook_profile_check(catalog)?;
             let root = root::RootSession {
                 owned: false,
                 started_boot_id: boot_id(),
@@ -701,7 +704,7 @@ fn yes_no(value: bool) -> &'static str {
 
 fn print_help() {
     println!(
-        "xpad2 {} - XPad2 signed installer; IonStack Root on fingerprint /19–/260\n\n\
+        "xpad2 {} - XPad2-family signed installer and IonStack launcher\n\n\
 Usage:\n  xpad2 status [--json]\n  xpad2 doctor\n  xpad2 list | info COMPONENT\n  xpad2 update [--check] [--version VERSION] [--offline DIRECTORY_OR_ZIP]\n  xpad2 root [-- COMMAND ARG...]\n  xpad2 freeze ota | unfreeze ota\n  xpad2 install [COMPONENT...]             # default: full (KSU)\n  xpad2 install cli FILE [--name NAME]\n  xpad2 install apk FILE\n  xpad2 hooks activate|disable\n  xpad2 verify [COMPONENT]\n  xpad2 repair COMPONENT\n  xpad2 cleanup\n  xpad2 logs export DIRECTORY\n  xpad2 cache path|list|verify|import DIRECTORY|prune|clear\n\n\
 Built-ins: ota, ksu, suu, zygisk, lsposed, ksu-manager, suu-manager, xpad-installer, installer-backup, boominstaller, full, suu-full\n\
 Global: --cache-dir DIRECTORY (or XPAD2_CACHE_DIR)\n\n\

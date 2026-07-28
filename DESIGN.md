@@ -1,6 +1,6 @@
 # XPad2 CLI 设计
 
-状态：v0.6.1 已实现；v0.1.1 完成 BoomInstaller 依赖身份和公开分发材料，v0.1.2
+状态：v0.7.0 已实现；v0.1.1 完成 BoomInstaller 依赖身份和公开分发材料，v0.1.2
 增加可验证的 OTA 冻结策略与 Root 前强制门禁，v0.1.3 对齐 KernelSU 驱动与
 官方生产签名 Manager 的 32547 构建号，v0.1.4 升级 late-load v0.2.1，恢复
 `u:r:ksu:s0` Manager Root 且保持全局 SELinux Enforcing；v0.1.5 将 BoomInstaller
@@ -69,6 +69,16 @@ v0.6.0 发布修订收敛 CLI 职责：移除具体应用进程与业务 Hook �
 v0.6.1 将显式选择的 SUU runtime 保留到 NeoZygisk/Vector 安装计划；未显式选择 runtime 的
 `install zygisk`/`install lsposed` 仍默认 KSU。两台 `/260` 真机分别完成 KSU 与 SUU
 late-load、Enforcing soft-reboot 和 Vector Bridge 严格验活。
+v0.7.0 增加 LS12/PD2 与 LS14/PD2P 的统一 IonStack launcher。设备选择同时绑定
+`ro.product.device`、完整 fingerprint、kernel release 和 ABI；exact kernel build 与
+动态 offset discovery 都只能在选定设备族内部选择 payload。PD2 和 PD2P controller/
+device payload 继续是两个独立制品，CLI 仅统一调度，不合并 offsets。PD2P 临时 Root
+范围为 `/19`–`/272`，/262 与 /272 共用已核对的 LS14 profile；未知 build 仍要求至少
+两个独立 anchors、preflight、validate 和同 Boot ID。LS14 KSU/SUU late-load 与显式
+Hook 已通过发布静态门禁：LS14 两个内核的 config/kallsyms 相同，KSU 137 与 SUU 141
+个导入全部存在，模块 CRC/vermagic 一致，且 9 个 Hook 核心 userspace 文件与 LS12/260
+逐字节相同。静态记录必须与 catalog 锁定哈希一致；PD2P artifact 固定到 POC v1.3.0，
+PD2 继续固定到 POC v1.2.0。
 
 验收覆盖单 ELF、只读状态探针、3-worker IonStack 临时 Root、KSU/SUU late-load、
 CLI/APK 身份验证、临时 Root 安全收口、同 boot 幂等重跑、普通重启后恢复、RSA 签名
@@ -766,7 +776,7 @@ licenses/
 完全一致，不能成为第二条版本线。固定名 update manifest 和 delta index 供 Latest Release
 发现；delta 只优化传输，不是独立版本线或信任根。
 
-## 14. v0.6.1 验收标准
+## 14. v0.7.0 验收标准
 
 1. 单个 `xpad2` ELF 可以被推送到 `/data/local/tmp` 并正常执行。
 2. `status` 和 `doctor` 不进行 Root 或持久修改。
@@ -821,12 +831,14 @@ licenses/
 41. 候选安装前存在同目录原子回滚副本；候选验证失败后恢复 ELF 精确哈希，且
     `last-self-update.json` 指向的永久备份不会被同次回收删除。
 42. fingerprint 固定前缀与 `:user/release-keys` 后缀不变；产品族门接受 canonical 数字
-    incremental 和 arm64，Root 门只接受 19–260 与 `4.19.191`。18、261 与 V231227
-    `/1703659196` 可运行 update/OTA/installer/Manager 控制面但不可进入 IonStack；前导零、
+    incremental 和 arm64，Root 门对 LS12 只接受 19–260、对 LS14 只接受 19–272，
+    两者都要求 `4.19.191`。范围外构建可运行 update/OTA/installer/Manager 控制面但
+    不可进入 IonStack；前导零、
     符号、溢出、尾随字符、错误产品前缀或 ABI 在产品族门拒绝。
     fingerprint Root 范围不能直接决定 kernel offsets；范围内未知 `uname -v` 必须由至少
     两个独立动态 anchor 唯一选型，并先完成无写入 validate。
-43. v0.5.2 的 signed catalog 顶层携带三套 IonStack profile 映射及对应 discovery offsets，update manifest 仅携带
+43. v0.7.0 的 signed catalog 顶层携带三套 PD2 与一套 PD2P IonStack profile 映射及
+    对应 discovery offsets，update manifest 仅携带
     精确 `/260` 兼容锚点；v0.4.14 会忽略未知 catalog 顶层字段，仍能在 /260 上完成升级。
 44. BoomInstaller Provider 必须同时报告 ready、配对密钥存在且可解密、paired，并区分
     network-untrusted、wireless-adb-not-started、key-invalid 与 pending-reboot；仅凭进程和
@@ -834,7 +846,7 @@ licenses/
 45. UID 2000 的无线 ADB 等待探针使用 shell-attributed `settings` 命令读取全局状态，
     不以 `android` calling package 访问 SettingsProvider；/260 真机连续稳定 TLS、配对和
     Provider `paired=true` 验收通过。
-46. 同产品族但不满足 Root 门的设备上，`update --check`、OTA、`xpad-installer`、
+46. 同产品族但不满足其设备族 Root 门的设备上，`update --check`、OTA、`xpad-installer`、
     `installer-backup`、Manager、BoomInstaller 和任意 CLI/APK 不被 Root profile 拦截；
     `root`、`ksu`、`suu`、`full`、`suu-full` 在任何 IonStack 写入前明确拒绝。
 47. BoomInstaller r24 在 KSU 真机中以 UID 0 启动 server/broker，经 OEM Provider 安装

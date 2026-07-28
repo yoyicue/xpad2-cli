@@ -169,7 +169,7 @@ printf 'XPAD2_ZYGISK_HEALTH enforcing=%s monitor=%s zygote=%s daemon=%s monitor_
         Ok(component_status(
             ZYGISK.id,
             ComponentState::Active,
-            Some("NeoZygisk v2.3 injected into zygote64; LS12 compatibility verified"),
+            Some("NeoZygisk v2.3 injected into zygote64; XPad2 compatibility verified"),
         ))
     } else {
         Ok(component_status(
@@ -388,7 +388,7 @@ pub fn install_component(
         }),
     )?;
     println!(
-        "✓ {}: 模块与 LS12 兼容补丁已验证并暂存；待 `xpad2 hooks activate`",
+        "✓ {}: 模块与 XPad2 兼容补丁已验证并暂存；待 `xpad2 hooks activate`",
         spec.id
     );
     Ok(true)
@@ -627,7 +627,7 @@ fn copy_to_root(root: &RootSession, local: &Path, remote: &str, mode: u32) -> Re
     let output = root.exec(&command)?;
     if output.status != 0 {
         return Err(msg(format!(
-            "cannot commit LS12 compatibility patch to {remote}: {}",
+            "cannot commit XPad2 compatibility patch to {remote}: {}",
             output.text
         )));
     }

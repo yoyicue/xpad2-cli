@@ -304,6 +304,7 @@ pub fn verify_external_catalog(cache: &Path, baseline: &Catalog) -> Result<Asset
         || external.product_version != baseline.lock.product_version
         || external.catalog_version != baseline.lock.catalog_version
         || external.profile != baseline.lock.profile
+        || external.device_profiles != baseline.lock.device_profiles
         || external.ionstack_profiles != baseline.lock.ionstack_profiles
         || external.ionstack_discovery_profiles != baseline.lock.ionstack_discovery_profiles
     {
@@ -772,6 +773,8 @@ mod tests {
             product_version: "test".to_string(),
             catalog_version: "test".to_string(),
             profile: DeviceProfile {
+                id: String::new(),
+                product_device: String::new(),
                 build_fingerprint: "fp".to_string(),
                 build_fingerprint_prefix: String::new(),
                 build_fingerprint_suffix: String::new(),
@@ -780,7 +783,10 @@ mod tests {
                 kernel_release_prefix: "kernel".to_string(),
                 kernel_version: String::new(),
                 abi: "arm64-v8a".to_string(),
+                late_load_supported: true,
+                hooks_supported: true,
             },
+            device_profiles: Vec::new(),
             ionstack_profiles: Vec::new(),
             ionstack_discovery_profiles: Vec::new(),
             artifacts: vec![artifact],

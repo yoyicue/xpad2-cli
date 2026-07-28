@@ -25,34 +25,54 @@ fn candidate_paths(manifest: &Path, artifact_dir: Option<&Path>, a: &Artifact) -
         paths.push(dir.join(&a.id));
     }
     let parent = manifest.parent().unwrap_or(manifest);
-    let ionstack_source = env::var_os("XPAD2_IONSTACK_SOURCE")
+    let default_ionstack_source = env::var_os("XPAD2_IONSTACK_SOURCE")
         .map(PathBuf::from)
         .unwrap_or_else(|| parent.join("xpad2-ionstack-poc"));
+    let ionstack_pd2_source = env::var_os("XPAD2_IONSTACK_PD2_SOURCE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| default_ionstack_source.clone());
+    let ionstack_pd2p_source = env::var_os("XPAD2_IONSTACK_PD2P_SOURCE")
+        .map(PathBuf::from)
+        .unwrap_or(default_ionstack_source);
     let mapped = match a.id.as_str() {
-        "ionstack-runner-v19-a" => Some(ionstack_source.join(
+        "ionstack-runner-xpad2p-v262-v272" => {
+            Some(ionstack_pd2p_source.join("build/xpad2p/ionstack_reroot_device"))
+        }
+        "ionstack-preload-xpad2p-v262-v272" => {
+            Some(ionstack_pd2p_source.join("build/xpad2p/ionstack_preload.so"))
+        }
+        "ionstack-perf-target-xpad2p" => {
+            Some(ionstack_pd2p_source.join("build/xpad2p/ionstack_perf_target"))
+        }
+        "ionstack-chainwalk-probe-xpad2p" => Some(
+            ionstack_pd2p_source
+                .join("build/xpad2p/cve_2026_43499_chainwalk_probe_arm32"),
+        ),
+        "ionstack-runner-v19-a" => Some(ionstack_pd2_source.join(
             "dist/xpad2-19-260/profiles/xpad2-v19-a/ionstack_reroot_device",
         )),
-        "ionstack-preload-v19-a" => Some(ionstack_source.join(
+        "ionstack-preload-v19-a" => Some(ionstack_pd2_source.join(
             "dist/xpad2-19-260/profiles/xpad2-v19-a/ionstack_preload.so",
         )),
-        "ionstack-runner-v19-b" => Some(ionstack_source.join(
+        "ionstack-runner-v19-b" => Some(ionstack_pd2_source.join(
             "dist/xpad2-19-260/profiles/xpad2-v19-b/ionstack_reroot_device",
         )),
-        "ionstack-preload-v19-b" => Some(ionstack_source.join(
+        "ionstack-preload-v19-b" => Some(ionstack_pd2_source.join(
             "dist/xpad2-19-260/profiles/xpad2-v19-b/ionstack_preload.so",
         )),
-        "ionstack-runner-v260" => Some(ionstack_source.join(
+        "ionstack-runner-v260" => Some(ionstack_pd2_source.join(
             "dist/xpad2-19-260/profiles/xpad2-v260/ionstack_reroot_device",
         )),
-        "ionstack-preload-v260" => Some(ionstack_source.join(
+        "ionstack-preload-v260" => Some(ionstack_pd2_source.join(
             "dist/xpad2-19-260/profiles/xpad2-v260/ionstack_preload.so",
         )),
-        "ionstack-perf-target" => {
-            Some(ionstack_source.join("dist/xpad2-19-260/profiles/xpad2-v260/ionstack_perf_target"))
-        }
-        "ionstack-chainwalk-probe" => {
-            Some(ionstack_source.join("dist/xpad2-19-260/profiles/xpad2-v260/cve_2026_43499_chainwalk_probe_arm32"))
-        }
+        "ionstack-perf-target" => Some(
+            ionstack_pd2_source
+                .join("dist/xpad2-19-260/profiles/xpad2-v260/ionstack_perf_target"),
+        ),
+        "ionstack-chainwalk-probe" => Some(ionstack_pd2_source.join(
+            "dist/xpad2-19-260/profiles/xpad2-v260/cve_2026_43499_chainwalk_probe_arm32",
+        )),
         "ksud" => Some(parent.join("xpad2-ksu-lateload/artifacts/ksud-xpad2")),
         "suu-ksud" => {
             Some(parent.join("xpad2-sukisu-lateload/artifacts/ksud-sukisu-xpad2"))
@@ -92,6 +112,8 @@ fn main() {
     println!("cargo:rerun-if-changed=assets.lock.json");
     println!("cargo:rerun-if-env-changed=XPAD2_ARTIFACT_DIR");
     println!("cargo:rerun-if-env-changed=XPAD2_IONSTACK_SOURCE");
+    println!("cargo:rerun-if-env-changed=XPAD2_IONSTACK_PD2_SOURCE");
+    println!("cargo:rerun-if-env-changed=XPAD2_IONSTACK_PD2P_SOURCE");
     let manifest = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let lock_path = manifest.join("assets.lock.json");
     let raw = fs::read(&lock_path).expect("read assets.lock.json");

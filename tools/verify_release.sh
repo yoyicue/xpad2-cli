@@ -7,21 +7,86 @@ DIST="$ROOT/dist"
 tmp_dir=$(mktemp -d /tmp/xpad2-release-verify.XXXXXX)
 trap 'rm -rf "$tmp_dir"' EXIT
 
-ionstack_commit=$(jq -r '.sources[] | select(.component == "ionstack") | .commit' \
+if jq -e 'any(.artifacts[]; .version | contains("-worktree-"))' \
+  "$ROOT/assets.lock.json" >/dev/null; then
+  printf 'release verification refuses worktree-only locked artifacts; pin the PD2P POC commit/tag first\n' >&2
+  exit 1
+fi
+"$ROOT/tools/check_ls14_static_gate_record.sh"
+
+ionstack_pd2_commit=$(jq -r \
+  '.sources[] | select(.component == "ionstack") | .commit' \
   "$ROOT/sources.lock.json")
-upstream_profiles=$(git -C "$ROOT/../xpad2-ionstack-poc" show \
-  "$ionstack_commit:profiles/xpad2_profiles.json")
-jq -e --argjson upstream "$upstream_profiles" '
-  ([.ionstack_profiles[] |
+ionstack_pd2p_commit=$(jq -r \
+  '.sources[] | select(.component == "ionstack-pd2p") | .commit' \
+  "$ROOT/sources.lock.json")
+upstream_pd2_profiles=$(git -C "$ROOT/../xpad2-ionstack-poc" show \
+  "$ionstack_pd2_commit:profiles/xpad2_profiles.json")
+upstream_pd2p_profiles=$(git -C "$ROOT/../xpad2-ionstack-poc" show \
+  "$ionstack_pd2p_commit:profiles/xpad2p_profiles.json")
+upstream_pd2p_release_lock=$(git -C "$ROOT/../xpad2-ionstack-poc" show \
+  "$ionstack_pd2p_commit:xpad2p-release.lock.json")
+jq -e \
+  --argjson pd2 "$upstream_pd2_profiles" \
+  --argjson pd2p "$upstream_pd2p_profiles" '
+  (.device_profiles[] | select(.id == "xpad2p")) as $device |
+  ([.ionstack_profiles[] | select(.device_profile_id == "xpad2") |
       {name:.id,kernel_version}] | sort_by(.name)) ==
-    ([$upstream.profiles[] | select(.release) |
+    ([$pd2.profiles[] | select(.release) |
       {name,kernel_version}] | sort_by(.name)) and
   ([.ionstack_discovery_profiles[] |
+      select(.profile_id | startswith("xpad2-")) |
       {name:.profile_id,offsets}] | sort_by(.name)) ==
-    ([$upstream.profiles[] | select(.release) |
-      {name,offsets}] | sort_by(.name))
+    ([$pd2.profiles[] | select(.release) |
+      {name,offsets}] | sort_by(.name)) and
+  ([.ionstack_profiles[] | select(.device_profile_id == "xpad2p") |
+      {
+        name:.id,
+        exact_tuples,
+        kernel_versions:([.kernel_version] + (.kernel_version_alternates // [])
+          | sort)
+      }]) ==
+    [{
+      name:$pd2p.profile.name,
+      exact_tuples:([$pd2p.profile.exact_tuples[] |
+        {
+          fingerprint_incremental:.incremental,
+          kernel_version
+        }]),
+      kernel_versions:([$pd2p.profile.exact_tuples[].kernel_version] | sort)
+    }] and
+  ([.ionstack_discovery_profiles[] |
+      select(.profile_id == $pd2p.profile.name) |
+      {name:.profile_id,offsets}]) ==
+    [{name:$pd2p.profile.name,offsets:$pd2p.profile.offsets}] and
+  $device.product_device == $pd2p.device and
+  $device.build_fingerprint_prefix == $pd2p.fingerprint_prefix and
+  $device.build_fingerprint_suffix == $pd2p.fingerprint_suffix and
+  $device.fingerprint_incremental_min == $pd2p.release_incremental_min and
+  $device.fingerprint_incremental_max == $pd2p.release_incremental_max and
+  $device.kernel_release_prefix == $pd2p.kernel_release
 ' "$ROOT/assets.lock.json" >/dev/null || {
-  printf 'signed IonStack profile/discovery catalog drifted from locked upstream source\n' >&2
+  printf 'signed PD2/PD2P IonStack catalog drifted from locked upstream sources\n' >&2
+  exit 1
+}
+jq -e \
+  --arg commit "$ionstack_pd2p_commit" \
+  --argjson upstream "$upstream_pd2p_release_lock" '
+  ([.artifacts[] |
+      select(.id == "ionstack-runner-xpad2p-v262-v272" or
+        .id == "ionstack-preload-xpad2p-v262-v272" or
+        .id == "ionstack-perf-target-xpad2p" or
+        .id == "ionstack-chainwalk-probe-xpad2p") |
+      {size,sha256}] | sort_by(.sha256)) ==
+    ([$upstream.artifacts[] | {size,sha256}] | sort_by(.sha256)) and
+  all(.artifacts[] |
+      select(.id == "ionstack-runner-xpad2p-v262-v272" or
+        .id == "ionstack-preload-xpad2p-v262-v272" or
+        .id == "ionstack-perf-target-xpad2p" or
+        .id == "ionstack-chainwalk-probe-xpad2p");
+      .version == $commit)
+' "$ROOT/assets.lock.json" >/dev/null || {
+  printf 'locked PD2P artifacts drifted from the v1.3.0 POC release lock\n' >&2
   exit 1
 }
 
@@ -186,7 +251,8 @@ for required in \
   licenses/SukiSU-kernel-GPL-2.0-LICENSE \
   licenses/xpad-installer-LICENSE \
   licenses/xpad2-ionstack-poc-LICENSE \
-  licenses/xpad2-ionstack-poc-Apache-2.0-LICENSE; do
+  licenses/xpad2-ionstack-poc-Apache-2.0-LICENSE \
+  static-validation/ls14-262-272.json; do
   [[ -s "$package/$required" ]] || {
     printf 'release license material missing: %s\n' "$required" >&2
     exit 1

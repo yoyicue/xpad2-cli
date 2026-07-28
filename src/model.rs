@@ -6,7 +6,10 @@ pub struct AssetsLock {
     pub schema: u32,
     pub product_version: String,
     pub catalog_version: String,
+    // Kept as the LS12 compatibility anchor consumed by older updaters.
     pub profile: DeviceProfile,
+    #[serde(default)]
+    pub device_profiles: Vec<DeviceProfile>,
     #[serde(default)]
     pub ionstack_profiles: Vec<IonStackProfile>,
     #[serde(default)]
@@ -17,6 +20,10 @@ pub struct AssetsLock {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct DeviceProfile {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub product_device: String,
     // Compatibility anchor consumed by pre-range updaters. It remains the
     // exact upper-bound /260 fingerprint even when the signed catalog also
     // carries the canonical incremental range below.
@@ -33,17 +40,34 @@ pub struct DeviceProfile {
     #[serde(default)]
     pub kernel_version: String,
     pub abi: String,
+    #[serde(default = "default_true")]
+    pub late_load_supported: bool,
+    #[serde(default = "default_true")]
+    pub hooks_supported: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct IonStackProfile {
     pub id: String,
+    #[serde(default)]
+    pub device_profile_id: String,
     pub kernel_version: String,
+    #[serde(default)]
+    pub kernel_version_alternates: Vec<String>,
+    #[serde(default)]
+    pub exact_tuples: Vec<IonStackExactTuple>,
     pub runner_artifact: String,
     pub perf_target_artifact: String,
     pub preload_artifact: String,
     pub chainwalk_probe_artifact: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct IonStackExactTuple {
+    pub fingerprint_incremental: u32,
+    pub kernel_version: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -122,6 +146,9 @@ pub struct DeviceStatus {
     // Backward-compatible field: this continues to mean that the IonStack
     // Root technical profile is supported, not merely that this is an XPad2.
     pub supported: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_profile: Option<String>,
+    pub product_device: String,
     pub fingerprint: String,
     pub fingerprint_incremental: Option<u32>,
     pub kernel_release: String,
@@ -132,6 +159,10 @@ pub struct DeviceStatus {
     pub components: Vec<ComponentStatus>,
     pub transaction_warnings: Vec<String>,
     pub action_required: Option<String>,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Clone, Debug, Serialize)]

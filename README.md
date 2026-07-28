@@ -1,13 +1,12 @@
 # xpad2
 
-`xpad2` 是运行在 XPad2 Android 设备上的单文件、可离线工作、可按需获得临时 Root，
+`xpad2` 是运行在 XPad2/PD2P Android 设备上的单文件、可离线工作、可按需获得临时 Root，
 并能通过签名 Release 自更新的安装器。
-控制面只接受签名锁定的 XPad2 产品族：固定 Android 构建前缀、`release-keys` 后缀、
-canonical 数字 incremental 和 arm64 ABI。IonStack Root 再单独要求 incremental 位于
-`/19`–`/260` 且内核属于 `4.19.191` 系列。精确 `uname -v` 直接选择 `xpad2-v19-a`、
-`xpad2-v19-b` 或 `xpad2-v260`；范围内未知 build 不在入口被拦截，而是进入只读
-discovery，以至少两个独立 offset anchor 唯一选型，再依次通过 preflight、validate 和
-Root 状态。
+控制面按 `ro.product.device`、完整 fingerprint、内核和 ABI 选择签名设备 profile：
+LS12/PD2 的 Root 范围为 `/19`–`/260`，LS14/PD2P 为 `/19`–`/272`。精确 `uname -v`
+直接选择对应的隔离 payload；范围内未知 build 进入同一设备族内部的只读 discovery，
+以至少两个独立 offset anchor 唯一选型，再依次通过 preflight、validate 和 Root 状态。
+PD2 与 PD2P payload 从不跨设备族候选或混用 offsets。
 它不提供桌面 GUI、桌面 CLI 或 `xpad2.apk`。
 
 第一次使用请直接阅读：[xpad2 小白使用指南](BEGINNER_GUIDE.md)。
@@ -47,10 +46,18 @@ adb -s SERIAL shell /data/local/tmp/xpad2 update
 
 - 产品族门：固定 XPad2 fingerprint 前缀、`:user/release-keys` 后缀、canonical 数字
   incremental 和 arm64 ABI；用于自更新、OTA 冻结/解冻、CLI/APK 安装及 0044 修复；
-- Root 门：在产品族门之上再要求 incremental `/19`–`/260` 和 `4.19.191` 内核；只用于
+- Root 门：在产品族门之上，LS12 要求 `/19`–`/260`，LS14 要求 `/19`–`/272`，
+  两者都要求 `4.19.191` 内核；只用于
   `root`、`ksu`、`suu`、`full`、`suu-full` 和真正启动 IonStack 的路径；
-- `/19`–`/260` 内未知 `uname -v` 会进入 POC 的只读 discovery 状态机，不会因未命中
-  三个精确 build 而被提前拦截；只有 discovery/preflight/validate 证据不足时才安全停止。
+- 范围内未知 `uname -v` 会进入对应设备族的只读 discovery 状态机；只有
+  discovery/preflight/validate 证据不足时才安全停止。
+
+PD2P 的 KSU/SUU late-load 与显式 Hook 路径已通过 LS14/262、/272 发布静态门禁：
+4.19.191 `vermagic`、`module_layout` CRC、全部模块导入符号、ABI 关键 config，以及
+Zygote/ART/Binder/Bionic 核心文件都与 LS12/260 基线核对。通过设备 profile 与
+IonStack 预检后，`ksu`、`suu`、`full`、`suu-full` 会自动继续；Hook 仍保持显式 opt-in，
+并在 Enforcing 下严格验活。证据记录见
+[`static-validation/ls14-262-272.json`](static-validation/ls14-262-272.json)。
 
 同一 XPad2 产品族但不满足 Root 门时，仍可显式安装完整的无 Root 控制面：
 
@@ -83,15 +90,16 @@ KernelSU；它会收敛以下目标状态：
   0044/31317；首次无线调试会区分网络未信任、TLS 未启动、配对密钥缺失/失效与待重启，
   不再把授权弹窗误报为成功。
 
-SukiSU Ultra 是显式可选后端：`xpad2 install suu-full` 会用已经真机验证的 SukiSU
-Ultra 40796、官方 `com.sukisu.ultra` Manager v4.1.3 替换上述 KSU runtime/Manager
+SukiSU Ultra 是显式可选后端：`xpad2 install suu-full` 会用 LS12 真机验证且已通过
+LS14 静态门禁的 SukiSU Ultra 40796、官方 `com.sukisu.ultra` Manager v4.1.3
+替换上述 KSU runtime/Manager
 组合，其余 installer、0044 backup 和 BoomInstaller 保持相同。`ksu` 与 `suu` 共用
 `kernelsu` 模块名，同一 boot 只能选择一个；切换必须先普通重启。
 
 ### NeoZygisk / Vector（LSPosed）
 
 Hook 运行时保持显式 opt-in，不进入默认 `full`。未显式选择 runtime 时继续默认 KSU；
-v0.6.1 同时支持已经真机验证的显式 SUU 路径：
+v0.6.1 起同时支持已经真机验证的显式 SUU 路径：
 
 ```sh
 xpad2 install zygisk          # 自动包含 ksu
@@ -204,7 +212,7 @@ APK；`xpad-installer` 是独立仓库产生的设备 CLI `/data/local/tmp/xpad-
 默认 `xpad2 update` 通过 `api.github.com` 的 Latest Release 元数据定位固定名的
 `xpad2-update.json`、签名和 asset ID，再由 API 重定向到 release-assets 下载域；不要求
 设备能够直连 `github.com:443`。HTTPS 只负责传输，GitHub API JSON 本身不作为信任根；
-更新清单、目标 ELF、catalog 签名、XPad2 产品族和 `/19`–`/260` Root profile 均由内置
+更新清单、目标 ELF、catalog 签名、XPad2/PD2P 产品族和各自 Root profile 均由内置
 production RSA 公钥及 SHA-256 验证。自更新只要求产品族门，不要求当前固件能够 Root。
 v0.4.6 起还会读取独立签名的 `xpad2-deltas.json`：只有当前 ELF 的版本、
 大小和 SHA-256 与某个发布基线全部精确一致，才下载对应 zstd patch；重建结果仍必须精确
@@ -220,7 +228,7 @@ cache ZIP；该 ZIP 只为旧 updater 和独立离线导入保留。目标 ELF �
 ```sh
 xpad2 update --check             # 只检查，不下载大文件、不修改设备
 xpad2 update                     # 更新到最新稳定版
-xpad2 update --version 0.6.1     # 选择精确发布版本
+xpad2 update --version 0.7.0     # 选择精确发布版本
 xpad2 update --reinstall         # 同版本修复性重装
 xpad2 update --offline FILE.zip  # 无网络时使用完整离线更新包
 ```
@@ -317,9 +325,11 @@ tools/verify_release.sh
 
 构建机可以把私有上游的锁定文件放在 `XPAD2_ARTIFACT_DIR`。文件名必须匹配
 `assets.lock.json`，并且大小和 SHA-256 始终重新校验。未指定时，开发机从同级组件
-仓库的固定输出位置读取。如果共享 PoC checkout 正在其他分支开发，可设置
-`XPAD2_IONSTACK_SOURCE=/path/to/release/xpad2-19-260/worktree` 使用隔离的锁定 worktree，
-无需覆盖当前工作目录。普通安装完全离线；只有显式 `xpad2 update` 才通过内置
+仓库的固定输出位置读取。发布构建可分别设置
+`XPAD2_IONSTACK_PD2_SOURCE=/path/to/v1.2.0/worktree` 与
+`XPAD2_IONSTACK_PD2P_SOURCE=/path/to/v1.3.0/worktree`，从两个独立锁定 worktree
+读取 PD2、PD2P 制品；`XPAD2_IONSTACK_SOURCE` 继续作为两者共用的兼容默认值。
+普通安装完全离线；只有显式 `xpad2 update` 才通过内置
 rustls/webpki HTTPS 客户端访问公开 GitHub Release。设备不包含 GitHub token、私有
 仓库凭据或发布私钥。
 
@@ -344,28 +354,36 @@ RSA-4096 production identity；两种 JSON 都有严格的 kind/schema/字段边
 IonStack Root 只接受以下指纹：
 
 ```text
-alps/vnd_ls12_mt8797_wifi_64/ls12_mt8797_wifi_64:13/TP1A.220624.014/<19..260>:user/release-keys
+PD2:  alps/vnd_ls12_mt8797_wifi_64/ls12_mt8797_wifi_64:13/TP1A.220624.014/<19..260>:user/release-keys
+PD2P: alps/vnd_ls14_mt8797_wifi_64/ls14_mt8797_wifi_64:13/TP1A.220624.014/<19..272>:user/release-keys
 ```
 
 尖括号表示 canonical 十进制 incremental 的闭区间，不是 fingerprint 中的字面字符。
-例如 `/19:user/release-keys`、`/100:user/release-keys` 和
-`/260:user/release-keys` 均可进入 Root 技术范围；`/18` 与 `/261` 不可 Root，但仍属于
-同一产品族并可使用无 Root 控制面。`/019`、带符号、溢出或附加字符不是 canonical
-incremental，连产品族门也会拒绝。
+`/019`、带符号、溢出或附加字符不是 canonical incremental，连产品族门也会拒绝。
+launcher 同时要求 `ro.product.device` 与 fingerprint 内的 LS12/LS14 身份一致，不能仅靠
+构建号把一个设备族伪装成另一个。
 `build_fingerprint` 中精确 `/260` 值继续作为 v0.4.14 及更旧 updater 的兼容锚点；
-非 `/260` 设备首次进入该版本线时需要按小白指南手工推送一次 v0.6.1。签名 catalog
-集成 `xpad2-ionstack-poc` `release/xpad2-19-260`（commit `6103dab`）的三套 profile：
+非 `/260` 设备首次进入该版本线时需要按小白指南手工推送一次 v0.7.0。PD2 catalog
+固定 `xpad2-ionstack-poc` v1.2.0（commit `6103dab`）的三套 profile；PD2P catalog
+独立固定 v1.3.0（commit `51ee9d2`）的 LS14 profile：
 
 | profile | 精确 `uname -v` |
 | --- | --- |
 | `xpad2-v19-a` | `#1 SMP PREEMPT Tue Aug 13 02:06:24 CST 2024` |
 | `xpad2-v19-b` | `#1 SMP PREEMPT Mon Dec 16 23:29:13 CST 2024` |
 | `xpad2-v260` | `#1 SMP PREEMPT Mon Jun 29 04:08:29 CST 2026` |
+| `xpad2p-v262-v272` | `#1 SMP PREEMPT Mon Jun 29 05:28:07 CST 2026`（/262）或 `#1 SMP PREEMPT Thu Jul 23 20:38:25 CST 2026`（/272） |
 
-不同 build 的 runner/preload 不能盲目互换。表内 build 走精确快速路径；表外但仍在
-`/19`–`/260` 范围内的 build 会先运行只读 KASLR/offset discovery。只有至少两个独立
-anchor 唯一指向同一 profile，且该 runner 的 preflight 与无写入 validate 状态均完成，
-控制面才显式允许最终写入；证据不足或候选冲突时安全停止。
+不同设备族或 build 的 runner/preload 不能盲目互换。表内 build 走精确快速路径；表外但
+仍在各自数字范围内的 build 会先运行只读 KASLR/offset discovery。候选集合先按
+`xpad2`/`xpad2p` 隔离，只有至少两个独立 anchor 唯一指向同族 profile，且该 runner 的
+preflight 与无写入 validate 状态均完成，控制面才允许最终写入。
+
+PD2 与 PD2P payload 分别锁到 v1.2.0、v1.3.0 的 commit/tag，`verify_sources.sh`
+会校验远端标签身份；`verify_release.sh` 还会逐项核对 v1.3.0 的 PD2P profile、offset
+catalog、设备二进制大小与 SHA-256。两条发布脚本都会执行
+`tools/check_ls14_static_gate_record.sh`，确保启用的 KSU/SUU/Hook 能力、/262 与 /272
+精确元组及锁定制品哈希都与静态验证记录一致。
 
 V231227 的 timestamp-style `/1703659196` 是 canonical 数字且属于同一签名 XPad2
 产品族，因此可以更新、冻结 OTA、安装 `xpad-installer`/`installer-backup`、Manager APK、

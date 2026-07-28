@@ -746,14 +746,20 @@ pub fn installed_apk_path(package: &str) -> crate::error::Result<Option<PathBuf>
 
 pub fn snapshot(catalog: &Catalog, paths: &Paths) -> DeviceStatus {
     let fingerprint = getprop("ro.build.fingerprint");
+    let product_device = getprop("ro.product.device");
     let kernel = kernel_release();
     let version = kernel_version();
     let abi = getprop("ro.product.cpu.abi");
-    let fingerprint_policy = catalog.lock.profile.fingerprint_policy();
-    let product_supported = catalog.lock.matches_product_device(&fingerprint, &abi);
-    let supported = catalog
-        .lock
-        .matches_technical_runtime(&fingerprint, &kernel, &abi);
+    let product_profile =
+        catalog
+            .lock
+            .selected_product_profile(&fingerprint, &product_device, &abi);
+    let technical_profile =
+        catalog
+            .lock
+            .selected_technical_profile(&fingerprint, &product_device, &kernel, &abi);
+    let product_supported = product_profile.is_some();
+    let supported = technical_profile.is_some();
     let mut components = vec![
         ota::status(),
         ksu_status(paths),
@@ -798,7 +804,10 @@ pub fn snapshot(catalog: &Catalog, paths: &Paths) -> DeviceStatus {
         product_version: env!("CARGO_PKG_VERSION").to_string(),
         product_supported,
         supported,
-        fingerprint_incremental: fingerprint_policy.incremental(&fingerprint),
+        device_profile: product_profile.map(|profile| profile.profile_id().to_string()),
+        product_device,
+        fingerprint_incremental: product_profile
+            .and_then(|profile| profile.fingerprint_policy().incremental(&fingerprint)),
         fingerprint,
         kernel_release: kernel,
         kernel_version: version,
@@ -813,52 +822,59 @@ pub fn snapshot(catalog: &Catalog, paths: &Paths) -> DeviceStatus {
 
 pub fn product_check(catalog: &Catalog) -> crate::error::Result<()> {
     let fingerprint = getprop("ro.build.fingerprint");
+    let product_device = getprop("ro.product.device");
     let abi = getprop("ro.product.cpu.abi");
-    let policy = catalog.lock.profile.fingerprint_policy();
-    policy.validate()?;
-    if !policy.matches_product_family(&fingerprint) {
+    catalog.lock.validate_device_profiles()?;
+    if catalog
+        .lock
+        .selected_product_profile(&fingerprint, &product_device, &abi)
+        .is_none()
+    {
         return Err(crate::error::msg(format!(
-            "unsupported XPad2 product fingerprint: expected canonical numeric incremental within {}…{}, got {}",
-            catalog.lock.profile.build_fingerprint_prefix,
-            catalog.lock.profile.build_fingerprint_suffix,
-            fingerprint
-        )));
-    }
-    if abi != catalog.lock.profile.abi {
-        return Err(crate::error::msg(format!(
-            "unsupported ABI: expected {}, got {}",
-            catalog.lock.profile.abi, abi
+            "unsupported XPad2-family device: ro.product.device={product_device}, fingerprint={fingerprint}, ABI={abi}"
         )));
     }
     Ok(())
 }
 
-pub fn root_profile_check(catalog: &Catalog) -> crate::error::Result<()> {
+pub fn root_profile_check(catalog: &Catalog) -> crate::error::Result<&crate::model::DeviceProfile> {
     let fingerprint = getprop("ro.build.fingerprint");
+    let product_device = getprop("ro.product.device");
     let kernel = kernel_release();
     let abi = getprop("ro.product.cpu.abi");
-    let policy = catalog.lock.profile.fingerprint_policy();
-    policy.validate()?;
-    if !policy.matches(&fingerprint) {
+    catalog.lock.validate_device_profiles()?;
+    catalog
+        .lock
+        .selected_technical_profile(&fingerprint, &product_device, &kernel, &abi)
+        .ok_or_else(|| {
+            crate::error::msg(format!(
+                "unsupported IonStack profile: ro.product.device={product_device}, fingerprint={fingerprint}, kernel={kernel}, ABI={abi}"
+            ))
+        })
+}
+
+pub fn runtime_profile_check(
+    catalog: &Catalog,
+) -> crate::error::Result<&crate::model::DeviceProfile> {
+    let profile = root_profile_check(catalog)?;
+    if !profile.late_load_supported {
         return Err(crate::error::msg(format!(
-            "unsupported firmware fingerprint: expected {}, got {}",
-            policy.expectation(),
-            fingerprint
+            "{} supports the isolated IonStack temporary-root launcher, but its KSU/SUU late-load artifacts are not release-validated",
+            profile.profile_id()
         )));
     }
-    if !kernel.starts_with(&catalog.lock.profile.kernel_release_prefix) {
+    Ok(profile)
+}
+
+pub fn hook_profile_check(catalog: &Catalog) -> crate::error::Result<&crate::model::DeviceProfile> {
+    let profile = runtime_profile_check(catalog)?;
+    if !profile.hooks_supported {
         return Err(crate::error::msg(format!(
-            "unsupported kernel: expected {}*, got {}",
-            catalog.lock.profile.kernel_release_prefix, kernel
+            "{} supports KSU/SUU late-load, but its NeoZygisk/Vector artifacts have not passed the release static gate",
+            profile.profile_id()
         )));
     }
-    if abi != catalog.lock.profile.abi {
-        return Err(crate::error::msg(format!(
-            "unsupported ABI: expected {}, got {}",
-            catalog.lock.profile.abi, abi
-        )));
-    }
-    Ok(())
+    Ok(profile)
 }
 
 pub fn component<'a>(snapshot: &'a DeviceStatus, id: &str) -> Option<&'a ComponentStatus> {

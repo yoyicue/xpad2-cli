@@ -6,8 +6,8 @@ use crate::model::ComponentState;
 use crate::ota;
 use crate::profile::{IonStackArtifacts, parse_anchor_offset};
 use crate::util::{
-    Paths, atomic_write, boot_id, kernel_version, output_text, remove_if_exists, run, selinux,
-    shell_quote, unique_id,
+    Paths, atomic_write, boot_id, getprop, kernel_version, output_text, remove_if_exists, run,
+    selinux, shell_quote, unique_id,
 };
 use serde_json::json;
 use std::collections::BTreeMap;
@@ -74,7 +74,11 @@ impl RootSession {
         log: &mut TransactionLog,
         preserve_existing: bool,
     ) -> Result<Self> {
-        device::root_profile_check(catalog)?;
+        let device_profile = device::root_profile_check(catalog)?;
+        let device_profile_id = device_profile.profile_id().to_string();
+        let fingerprint_incremental = device_profile
+            .fingerprint_policy()
+            .incremental(&getprop("ro.build.fingerprint"));
         let started_boot_id = boot_id();
         let ota_status = ota::freeze(log)?;
         println!(
@@ -113,7 +117,9 @@ impl RootSession {
             paths,
             log,
             &started_boot_id,
+            &device_profile_id,
             &current_kernel_version,
+            fingerprint_incremental,
         )?;
         let artifacts = selection.artifacts;
         log.event(
@@ -375,9 +381,15 @@ fn select_ionstack_profile<'a>(
     paths: &Paths,
     log: &mut TransactionLog,
     expected_boot_id: &str,
+    device_profile_id: &str,
     current_kernel_version: &str,
+    fingerprint_incremental: Option<u32>,
 ) -> Result<ProfileSelection<'a>> {
-    if let Some(artifacts) = catalog.lock.ionstack_artifacts(current_kernel_version) {
+    if let Some(artifacts) = catalog.lock.ionstack_artifacts(
+        device_profile_id,
+        current_kernel_version,
+        fingerprint_incremental,
+    ) {
         return Ok(ProfileSelection {
             artifacts,
             evidence: ProfileEvidence::Exact,
@@ -387,7 +399,7 @@ fn select_ionstack_profile<'a>(
 
     let discovery_target = catalog
         .lock
-        .ionstack_discovery_target()
+        .ionstack_discovery_target(device_profile_id)
         .ok_or_else(|| msg("signed catalog has no IonStack discovery target"))?;
     let resolved = catalog.resolve(discovery_target, paths)?;
     atomic_write(Path::new(PERF_TARGET), &resolved.load()?, 0o700)?;
@@ -396,6 +408,7 @@ fn select_ionstack_profile<'a>(
         "root-profile-discovery",
         "running",
         json!({
+            "device_profile": device_profile_id,
             "kernel_version": current_kernel_version,
             "target": discovery_target,
             "policy": "two-independent-offset-anchors",
@@ -403,7 +416,7 @@ fn select_ionstack_profile<'a>(
     )?;
     let observations = collect_profile_observations(log, expected_boot_id)?;
     let (profile_id, anchor_matches, candidates) =
-        compatible_profile(&catalog.lock, &observations)?;
+        compatible_profile(&catalog.lock, device_profile_id, &observations)?;
     let artifacts = catalog
         .lock
         .ionstack_artifacts_for_profile(profile_id)
@@ -548,10 +561,13 @@ fn parse_discovery_observations(text: &str, observations: &mut BTreeMap<u64, u32
 
 fn compatible_profile<'a>(
     lock: &'a crate::model::AssetsLock,
+    device_profile_id: &str,
     observations: &BTreeMap<u64, u32>,
 ) -> Result<(&'a str, usize, Vec<serde_json::Value>)> {
     let mut candidates = Vec::new();
-    for profile in &lock.ionstack_discovery_profiles {
+    for profile in lock.ionstack_discovery_profiles.iter().filter(|profile| {
+        lock.ionstack_profile_belongs_to_device(&profile.profile_id, device_profile_id)
+    }) {
         let mut anchor_matches = 0usize;
         let mut hit_score = 0u64;
         for value in profile.offsets.values() {
@@ -757,6 +773,7 @@ fn stale_daemon_pid() -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::{IonStackDiscoveryProfile, IonStackProfile};
 
     const V19_B_DISCOVERY: &str = r#"
 [perf-target] DISCOVERY workload=getuid base=0xffffff9e36280000 samples=42 image_ips=42 image_regs=4 direct_regs=20
@@ -789,7 +806,8 @@ mod tests {
         let catalog = Catalog::load().unwrap();
         let mut observations = BTreeMap::new();
         parse_discovery_observations(V19_B_DISCOVERY, &mut observations);
-        let (profile, matches, _) = compatible_profile(&catalog.lock, &observations).unwrap();
+        let (profile, matches, _) =
+            compatible_profile(&catalog.lock, "xpad2", &observations).unwrap();
         assert_eq!(profile, "xpad2-v19-b");
         assert_eq!(matches, 6);
     }
@@ -798,7 +816,54 @@ mod tests {
     fn common_anchor_alone_is_ambiguous() {
         let catalog = Catalog::load().unwrap();
         let observations = BTreeMap::from([(0x020fb2b8, 17)]);
-        assert!(compatible_profile(&catalog.lock, &observations).is_err());
+        assert!(compatible_profile(&catalog.lock, "xpad2", &observations).is_err());
+    }
+
+    #[test]
+    fn compatible_discovery_never_crosses_the_selected_device_family() {
+        let catalog = Catalog::load().unwrap();
+        let mut lock = catalog.lock.clone();
+        for profile in &mut lock.ionstack_profiles {
+            profile.device_profile_id = "xpad2".to_string();
+        }
+        lock.ionstack_profiles.push(IonStackProfile {
+            id: "xpad2p-test".to_string(),
+            device_profile_id: "xpad2p".to_string(),
+            kernel_version: "xpad2p-test-kernel".to_string(),
+            kernel_version_alternates: Vec::new(),
+            exact_tuples: Vec::new(),
+            runner_artifact: "runner-xpad2p".to_string(),
+            perf_target_artifact: "perf-xpad2p".to_string(),
+            preload_artifact: "preload-xpad2p".to_string(),
+            chainwalk_probe_artifact: "probe-xpad2p".to_string(),
+        });
+        lock.ionstack_discovery_profiles
+            .push(IonStackDiscoveryProfile {
+                profile_id: "xpad2p-test".to_string(),
+                offsets: [
+                    ("ashmem_llseek".to_string(), "0x00be7210".to_string()),
+                    ("ashmem_open".to_string(), "0x00be7e58".to_string()),
+                ]
+                .into_iter()
+                .collect(),
+            });
+
+        let mut observations = BTreeMap::new();
+        parse_discovery_observations(V19_B_DISCOVERY, &mut observations);
+        let (xpad2, _, xpad2_candidates) =
+            compatible_profile(&lock, "xpad2", &observations).unwrap();
+        assert_eq!(xpad2, "xpad2-v19-b");
+        assert!(
+            xpad2_candidates
+                .iter()
+                .all(|candidate| candidate["profile"] != "xpad2p-test")
+        );
+
+        let (xpad2p, matches, xpad2p_candidates) =
+            compatible_profile(&lock, "xpad2p", &observations).unwrap();
+        assert_eq!(xpad2p, "xpad2p-test");
+        assert_eq!(matches, 2);
+        assert_eq!(xpad2p_candidates.len(), 1);
     }
 
     #[test]

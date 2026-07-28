@@ -64,12 +64,18 @@ pub fn install_components(catalog: &Catalog, paths: &Paths, requested: &[String]
             Some("suu") if components.iter().any(|id| id == "suu-manager") => Some("suu-manager"),
             _ => None,
         };
+        if components
+            .iter()
+            .any(|id| id == "zygisk" || id == "lsposed")
+        {
+            device::hook_profile_check(catalog)?;
+        }
 
         if let Some(runtime_id) = runtime_id {
             // A runtime request is the only built-in install path that needs
             // the IonStack fingerprint/kernel gate. Product-family installs
             // below remain available when Root is unsupported.
-            device::root_profile_check(catalog)?;
+            device::runtime_profile_check(catalog)?;
             let ota_status = ota::freeze(&mut log)?;
             println!(
                 "✓ ota: {}",
