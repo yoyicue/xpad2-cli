@@ -30,16 +30,16 @@ jq -e \
   --argjson pd2 "$upstream_pd2_profiles" \
   --argjson pd2p "$upstream_pd2p_profiles" '
   (.device_profiles[] | select(.id == "xpad2p")) as $device |
-  ([.ionstack_profiles[] | select(.device_profile_id == "xpad2") |
+  ([.ionstack_profiles_v2[] | select(.device_profile_id == "xpad2") |
       {name:.id,kernel_version}] | sort_by(.name)) ==
     ([$pd2.profiles[] | select(.release) |
       {name,kernel_version}] | sort_by(.name)) and
-  ([.ionstack_discovery_profiles[] |
+  ([.ionstack_discovery_profiles_v2[] |
       select(.profile_id | startswith("xpad2-")) |
       {name:.profile_id,offsets}] | sort_by(.name)) ==
     ([$pd2.profiles[] | select(.release) |
       {name,offsets}] | sort_by(.name)) and
-  ([.ionstack_profiles[] | select(.device_profile_id == "xpad2p") |
+  ([.ionstack_profiles_v2[] | select(.device_profile_id == "xpad2p") |
       {
         name:.id,
         exact_tuples,
@@ -55,7 +55,7 @@ jq -e \
         }]),
       kernel_versions:([$pd2p.profile.exact_tuples[].kernel_version] | sort)
     }] and
-  ([.ionstack_discovery_profiles[] |
+  ([.ionstack_discovery_profiles_v2[] |
       select(.profile_id == $pd2p.profile.name) |
       {name:.profile_id,offsets}]) ==
     [{name:$pd2p.profile.name,offsets:$pd2p.profile.offsets}] and

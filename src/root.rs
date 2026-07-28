@@ -565,9 +565,13 @@ fn compatible_profile<'a>(
     observations: &BTreeMap<u64, u32>,
 ) -> Result<(&'a str, usize, Vec<serde_json::Value>)> {
     let mut candidates = Vec::new();
-    for profile in lock.ionstack_discovery_profiles.iter().filter(|profile| {
-        lock.ionstack_profile_belongs_to_device(&profile.profile_id, device_profile_id)
-    }) {
+    for profile in lock
+        .configured_ionstack_discovery_profiles()
+        .iter()
+        .filter(|profile| {
+            lock.ionstack_profile_belongs_to_device(&profile.profile_id, device_profile_id)
+        })
+    {
         let mut anchor_matches = 0usize;
         let mut hit_score = 0u64;
         for value in profile.offsets.values() {
@@ -823,10 +827,10 @@ mod tests {
     fn compatible_discovery_never_crosses_the_selected_device_family() {
         let catalog = Catalog::load().unwrap();
         let mut lock = catalog.lock.clone();
-        for profile in &mut lock.ionstack_profiles {
+        for profile in &mut lock.ionstack_profiles_v2 {
             profile.device_profile_id = "xpad2".to_string();
         }
-        lock.ionstack_profiles.push(IonStackProfile {
+        lock.ionstack_profiles_v2.push(IonStackProfile {
             id: "xpad2p-test".to_string(),
             device_profile_id: "xpad2p".to_string(),
             kernel_version: "xpad2p-test-kernel".to_string(),
@@ -837,7 +841,7 @@ mod tests {
             preload_artifact: "preload-xpad2p".to_string(),
             chainwalk_probe_artifact: "probe-xpad2p".to_string(),
         });
-        lock.ionstack_discovery_profiles
+        lock.ionstack_discovery_profiles_v2
             .push(IonStackDiscoveryProfile {
                 profile_id: "xpad2p-test".to_string(),
                 offsets: [

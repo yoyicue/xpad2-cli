@@ -14,6 +14,13 @@ pub struct AssetsLock {
     pub ionstack_profiles: Vec<IonStackProfile>,
     #[serde(default)]
     pub ionstack_discovery_profiles: Vec<IonStackDiscoveryProfile>,
+    // Enhanced multi-device schema. The legacy arrays above retain their
+    // exact v0.6.1 shape so an older updater can validate a newer catalog
+    // before handing control to the candidate binary.
+    #[serde(default)]
+    pub ionstack_profiles_v2: Vec<IonStackProfile>,
+    #[serde(default)]
+    pub ionstack_discovery_profiles_v2: Vec<IonStackDiscoveryProfile>,
     pub artifacts: Vec<Artifact>,
 }
 

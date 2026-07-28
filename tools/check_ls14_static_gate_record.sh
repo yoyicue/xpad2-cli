@@ -25,7 +25,7 @@ jq -e --slurpfile catalog "$CATALOG" '
       .fingerprint_incremental] | sort) == [262, 272] and
   ([.profiles[] | select(.device_profile_id == "xpad2p") |
       {fingerprint_incremental, kernel_version}] | sort_by(.fingerprint_incremental)) ==
-    ([$catalog[0].ionstack_profiles[] |
+    ([$catalog[0].ionstack_profiles_v2[] |
         select(.device_profile_id == "xpad2p") | .exact_tuples[]] |
       sort_by(.fingerprint_incremental)) and
   ([.kernel_modules[] |

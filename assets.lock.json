@@ -1,10 +1,8 @@
 {
   "schema": 1,
-  "product_version": "0.7.0",
-  "catalog_version": "2026-07-28.1",
+  "product_version": "0.7.1",
+  "catalog_version": "2026-07-28.2",
   "profile": {
-    "id": "xpad2",
-    "product_device": "ls12_mt8797_wifi_64",
     "build_fingerprint": "alps/vnd_ls12_mt8797_wifi_64/ls12_mt8797_wifi_64:13/TP1A.220624.014/260:user/release-keys",
     "build_fingerprint_prefix": "alps/vnd_ls12_mt8797_wifi_64/ls12_mt8797_wifi_64:13/TP1A.220624.014/",
     "build_fingerprint_suffix": ":user/release-keys",
@@ -12,9 +10,7 @@
     "fingerprint_incremental_max": 260,
     "kernel_release_prefix": "4.19.191",
     "kernel_version": "#1 SMP PREEMPT Mon Jun 29 04:08:29 CST 2026",
-    "abi": "arm64-v8a",
-    "late_load_supported": true,
-    "hooks_supported": true
+    "abi": "arm64-v8a"
   },
   "device_profiles": [
     {
@@ -47,6 +43,32 @@
     }
   ],
   "ionstack_profiles": [
+    {
+      "id": "xpad2-v19-a",
+      "kernel_version": "#1 SMP PREEMPT Tue Aug 13 02:06:24 CST 2024",
+      "runner_artifact": "ionstack-runner-v19-a",
+      "perf_target_artifact": "ionstack-perf-target",
+      "preload_artifact": "ionstack-preload-v19-a",
+      "chainwalk_probe_artifact": "ionstack-chainwalk-probe"
+    },
+    {
+      "id": "xpad2-v19-b",
+      "kernel_version": "#1 SMP PREEMPT Mon Dec 16 23:29:13 CST 2024",
+      "runner_artifact": "ionstack-runner-v19-b",
+      "perf_target_artifact": "ionstack-perf-target",
+      "preload_artifact": "ionstack-preload-v19-b",
+      "chainwalk_probe_artifact": "ionstack-chainwalk-probe"
+    },
+    {
+      "id": "xpad2-v260",
+      "kernel_version": "#1 SMP PREEMPT Mon Jun 29 04:08:29 CST 2026",
+      "runner_artifact": "ionstack-runner-v260",
+      "perf_target_artifact": "ionstack-perf-target",
+      "preload_artifact": "ionstack-preload-v260",
+      "chainwalk_probe_artifact": "ionstack-chainwalk-probe"
+    }
+  ],
+  "ionstack_profiles_v2": [
     {
       "id": "xpad2-v19-a",
       "device_profile_id": "xpad2",
@@ -98,6 +120,59 @@
     }
   ],
   "ionstack_discovery_profiles": [
+    {
+      "profile_id": "xpad2-v19-a",
+      "offsets": {
+        "ashmem_llseek": "0x00be6de8",
+        "ashmem_read_iter": "0x00be6e84",
+        "ashmem_ioctl": "0x00be6f38",
+        "ashmem_compat_ioctl": "0x00be7878",
+        "ashmem_mmap": "0x00be78c4",
+        "ashmem_open": "0x00be7a30",
+        "ashmem_release": "0x00be7ab0",
+        "ashmem_show_fdinfo": "0x00be7bc4",
+        "ashmem_fops": "0x011409f0",
+        "ashmem_misc_fops": "0x0181d960",
+        "selinux_state": "0x020fb2b8",
+        "selinux_enforcing": "0x020fb2b9"
+      }
+    },
+    {
+      "profile_id": "xpad2-v19-b",
+      "offsets": {
+        "ashmem_llseek": "0x00be7210",
+        "ashmem_read_iter": "0x00be72ac",
+        "ashmem_ioctl": "0x00be7360",
+        "ashmem_compat_ioctl": "0x00be7ca0",
+        "ashmem_mmap": "0x00be7cec",
+        "ashmem_open": "0x00be7e58",
+        "ashmem_release": "0x00be7ed8",
+        "ashmem_show_fdinfo": "0x00be7fec",
+        "ashmem_fops": "0x011409f0",
+        "ashmem_misc_fops": "0x0181d960",
+        "selinux_state": "0x020fb2b8",
+        "selinux_enforcing": "0x020fb2b9"
+      }
+    },
+    {
+      "profile_id": "xpad2-v260",
+      "offsets": {
+        "ashmem_llseek": "0x00be4c48",
+        "ashmem_read_iter": "0x00be4ce4",
+        "ashmem_ioctl": "0x00be4d98",
+        "ashmem_compat_ioctl": "0x00be56d8",
+        "ashmem_mmap": "0x00be5724",
+        "ashmem_open": "0x00be5890",
+        "ashmem_release": "0x00be5910",
+        "ashmem_show_fdinfo": "0x00be5a24",
+        "ashmem_fops": "0x011409f0",
+        "ashmem_misc_fops": "0x0181d960",
+        "selinux_state": "0x020fb2b8",
+        "selinux_enforcing": "0x020fb2b9"
+      }
+    }
+  ],
+  "ionstack_discovery_profiles_v2": [
     {
       "profile_id": "xpad2-v19-a",
       "offsets": {

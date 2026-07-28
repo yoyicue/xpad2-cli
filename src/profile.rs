@@ -97,6 +97,24 @@ impl AssetsLock {
         }
     }
 
+    pub(crate) fn configured_ionstack_profiles(&self) -> &[IonStackProfile] {
+        if self.ionstack_profiles_v2.is_empty() {
+            &self.ionstack_profiles
+        } else {
+            &self.ionstack_profiles_v2
+        }
+    }
+
+    pub(crate) fn configured_ionstack_discovery_profiles(
+        &self,
+    ) -> &[crate::model::IonStackDiscoveryProfile] {
+        if self.ionstack_discovery_profiles_v2.is_empty() {
+            &self.ionstack_discovery_profiles
+        } else {
+            &self.ionstack_discovery_profiles_v2
+        }
+    }
+
     pub fn selected_product_profile(
         &self,
         fingerprint: &str,
@@ -150,13 +168,18 @@ impl AssetsLock {
                 )));
             }
         }
-        if !self
-            .device_profiles
-            .iter()
-            .any(|profile| profile == &self.profile)
-        {
+        if !self.device_profiles.iter().any(|profile| {
+            profile.build_fingerprint == self.profile.build_fingerprint
+                && profile.build_fingerprint_prefix == self.profile.build_fingerprint_prefix
+                && profile.build_fingerprint_suffix == self.profile.build_fingerprint_suffix
+                && profile.fingerprint_incremental_min == self.profile.fingerprint_incremental_min
+                && profile.fingerprint_incremental_max == self.profile.fingerprint_incremental_max
+                && profile.kernel_release_prefix == self.profile.kernel_release_prefix
+                && profile.kernel_version == self.profile.kernel_version
+                && profile.abi == self.profile.abi
+        }) {
             return Err(msg(
-                "legacy compatibility profile must exactly match one device-family profile",
+                "legacy compatibility profile must match one device-family identity",
             ));
         }
         Ok(())
@@ -164,11 +187,13 @@ impl AssetsLock {
 
     pub fn validate_ionstack_profiles(&self) -> Result<()> {
         self.validate_device_profiles()?;
-        if self.ionstack_profiles.is_empty() {
+        let profiles = self.configured_ionstack_profiles();
+        let discovery_profiles = self.configured_ionstack_discovery_profiles();
+        if profiles.is_empty() {
             if self.profile.kernel_version.is_empty() {
                 return Err(msg("legacy device profile has an empty kernel build"));
             }
-            if !self.ionstack_discovery_profiles.is_empty() {
+            if !discovery_profiles.is_empty() {
                 return Err(msg(
                     "legacy device profile unexpectedly has discovery profiles",
                 ));
@@ -184,7 +209,7 @@ impl AssetsLock {
             .into_iter()
             .map(DeviceProfile::profile_id)
             .collect::<BTreeSet<_>>();
-        for profile in &self.ionstack_profiles {
+        for profile in profiles {
             if profile.id.is_empty()
                 || profile.kernel_version.is_empty()
                 || profile.runner_artifact.is_empty()
@@ -259,13 +284,13 @@ impl AssetsLock {
             }
         }
 
-        if self.ionstack_discovery_profiles.len() != self.ionstack_profiles.len() {
+        if discovery_profiles.len() != profiles.len() {
             return Err(msg(
                 "IonStack discovery catalog must cover every artifact profile",
             ));
         }
         let mut discovery_ids = BTreeSet::new();
-        for discovery in &self.ionstack_discovery_profiles {
+        for discovery in discovery_profiles {
             if !ids.contains(discovery.profile_id.as_str()) {
                 return Err(msg(format!(
                     "IonStack discovery references unknown profile {}",
@@ -304,7 +329,7 @@ impl AssetsLock {
     }
 
     pub fn ionstack_profile(&self, profile_id: &str) -> Option<&IonStackProfile> {
-        self.ionstack_profiles
+        self.configured_ionstack_profiles()
             .iter()
             .find(|profile| profile.id == profile_id)
     }
@@ -324,7 +349,7 @@ impl AssetsLock {
     }
 
     pub fn ionstack_discovery_target(&self, device_profile_id: &str) -> Option<&str> {
-        self.ionstack_profiles
+        self.configured_ionstack_profiles()
             .iter()
             .find(|profile| profile.belongs_to(device_profile_id))
             .map(|profile| profile.perf_target_artifact.as_str())
@@ -336,7 +361,8 @@ impl AssetsLock {
         kernel_version: &str,
         fingerprint_incremental: Option<u32>,
     ) -> Option<IonStackArtifacts<'_>> {
-        if self.ionstack_profiles.is_empty() {
+        let profiles = self.configured_ionstack_profiles();
+        if profiles.is_empty() {
             return (device_profile_id == "legacy"
                 && (self.profile.kernel_version.is_empty()
                     || self.profile.kernel_version == kernel_version))
@@ -348,7 +374,7 @@ impl AssetsLock {
                     chainwalk_probe: "ionstack-chainwalk-probe",
                 });
         }
-        let profile = self.ionstack_profiles.iter().find(|profile| {
+        let profile = profiles.iter().find(|profile| {
             profile.belongs_to(device_profile_id)
                 && profile.matches_exact(kernel_version, fingerprint_incremental)
         })?;
@@ -515,6 +541,8 @@ mod tests {
                 discovery_profile("xpad2-v19-b", "0x00be7210"),
                 discovery_profile("xpad2-v260", "0x00be4c48"),
             ],
+            ionstack_profiles_v2: Vec::new(),
+            ionstack_discovery_profiles_v2: Vec::new(),
             artifacts: Vec::new(),
         }
     }
@@ -572,8 +600,10 @@ mod tests {
             catalog_version: "test".to_string(),
             profile: xpad2.clone(),
             device_profiles: vec![xpad2, xpad2p],
-            ionstack_profiles: vec![xpad2_profile, xpad2p_profile],
-            ionstack_discovery_profiles: vec![
+            ionstack_profiles: Vec::new(),
+            ionstack_discovery_profiles: Vec::new(),
+            ionstack_profiles_v2: vec![xpad2_profile, xpad2p_profile],
+            ionstack_discovery_profiles_v2: vec![
                 discovery_profile("xpad2-v260", "0x00be4c48"),
                 discovery_profile("xpad2p-v262-v272", "0x00be0b18"),
             ],
@@ -916,11 +946,36 @@ mod tests {
 
     #[test]
     fn release_catalog_remains_readable_by_the_v0_4_14_shape() {
+        #[allow(dead_code)]
         #[derive(serde::Deserialize)]
+        #[serde(deny_unknown_fields)]
         struct LegacyProfile {
             build_fingerprint: String,
+            build_fingerprint_prefix: String,
+            build_fingerprint_suffix: String,
+            fingerprint_incremental_min: u32,
+            fingerprint_incremental_max: u32,
             kernel_release_prefix: String,
+            kernel_version: String,
             abi: String,
+        }
+        #[allow(dead_code)]
+        #[derive(serde::Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct LegacyIonStackProfile {
+            id: String,
+            kernel_version: String,
+            runner_artifact: String,
+            perf_target_artifact: String,
+            preload_artifact: String,
+            chainwalk_probe_artifact: String,
+        }
+        #[allow(dead_code)]
+        #[derive(serde::Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct LegacyDiscoveryProfile {
+            profile_id: String,
+            offsets: BTreeMap<String, String>,
         }
         #[derive(serde::Deserialize)]
         struct LegacyAssetsLock {
@@ -928,7 +983,9 @@ mod tests {
             product_version: String,
             catalog_version: String,
             profile: LegacyProfile,
-            artifacts: Vec<crate::model::Artifact>,
+            ionstack_profiles: Vec<LegacyIonStackProfile>,
+            ionstack_discovery_profiles: Vec<LegacyDiscoveryProfile>,
+            artifacts: Vec<serde_json::Value>,
         }
 
         let legacy: LegacyAssetsLock = serde_json::from_str(include_str!(concat!(
@@ -937,11 +994,25 @@ mod tests {
         )))
         .unwrap();
         assert_eq!(legacy.schema, 1);
-        assert_eq!(legacy.product_version, "0.7.0");
-        assert_eq!(legacy.catalog_version, "2026-07-28.1");
+        assert_eq!(legacy.product_version, "0.7.1");
+        assert_eq!(legacy.catalog_version, "2026-07-28.2");
         assert!(legacy.profile.build_fingerprint.contains("/260:"));
         assert_eq!(legacy.profile.kernel_release_prefix, "4.19.191");
         assert_eq!(legacy.profile.abi, "arm64-v8a");
+        assert_eq!(legacy.ionstack_profiles.len(), 3);
+        assert_eq!(legacy.ionstack_discovery_profiles.len(), 3);
+        assert!(
+            legacy
+                .ionstack_profiles
+                .iter()
+                .all(|profile| profile.id.starts_with("xpad2-v"))
+        );
+        assert!(
+            legacy
+                .ionstack_discovery_profiles
+                .iter()
+                .all(|profile| profile.profile_id.starts_with("xpad2-v"))
+        );
         assert!(!legacy.artifacts.is_empty());
     }
 }

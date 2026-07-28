@@ -87,7 +87,7 @@ impl Catalog {
                 )));
             }
         }
-        for profile in &lock.ionstack_profiles {
+        for profile in lock.configured_ionstack_profiles() {
             let role_ids = [
                 &profile.runner_artifact,
                 &profile.perf_target_artifact,
@@ -307,6 +307,8 @@ pub fn verify_external_catalog(cache: &Path, baseline: &Catalog) -> Result<Asset
         || external.device_profiles != baseline.lock.device_profiles
         || external.ionstack_profiles != baseline.lock.ionstack_profiles
         || external.ionstack_discovery_profiles != baseline.lock.ionstack_discovery_profiles
+        || external.ionstack_profiles_v2 != baseline.lock.ionstack_profiles_v2
+        || external.ionstack_discovery_profiles_v2 != baseline.lock.ionstack_discovery_profiles_v2
     {
         return Err(Error::CatalogReleaseMismatch);
     }
@@ -789,6 +791,8 @@ mod tests {
             device_profiles: Vec::new(),
             ionstack_profiles: Vec::new(),
             ionstack_discovery_profiles: Vec::new(),
+            ionstack_profiles_v2: Vec::new(),
+            ionstack_discovery_profiles_v2: Vec::new(),
             artifacts: vec![artifact],
         };
         let source = paths.root.join("source");
