@@ -229,7 +229,7 @@ cache ZIP；该 ZIP 只为旧 updater 和独立离线导入保留。目标 ELF �
 ```sh
 xpad2 update --check             # 只检查，不下载大文件、不修改设备
 xpad2 update                     # 更新到最新稳定版
-xpad2 update --version 0.7.1     # 选择精确发布版本
+xpad2 update --version 0.7.2     # 选择精确发布版本
 xpad2 update --reinstall         # 同版本修复性重装
 xpad2 update --offline FILE.zip  # 无网络时使用完整离线更新包
 ```
@@ -364,7 +364,7 @@ PD2P: alps/vnd_ls14_mt8797_wifi_64/ls14_mt8797_wifi_64:13/TP1A.220624.014/<19..2
 launcher 同时要求 `ro.product.device` 与 fingerprint 内的 LS12/LS14 身份一致，不能仅靠
 构建号把一个设备族伪装成另一个。
 `build_fingerprint` 中精确 `/260` 值继续作为 v0.4.14 及更旧 updater 的兼容锚点；
-非 `/260` 设备首次进入该版本线时需要按小白指南手工推送一次 v0.7.1。PD2 catalog
+非 `/260` 设备首次进入该版本线时需要按小白指南手工推送一次 v0.7.2。PD2 catalog
 固定 `xpad2-ionstack-poc` v1.2.0（commit `6103dab`）的三套 profile；PD2P catalog
 独立固定 v1.3.0（commit `51ee9d2`）的 LS14 profile：
 
