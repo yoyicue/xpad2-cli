@@ -9,36 +9,74 @@ trap 'rm -rf "$tmp_dir"' EXIT
 
 if jq -e 'any(.artifacts[]; .version | contains("-worktree-"))' \
   "$ROOT/assets.lock.json" >/dev/null; then
-  printf 'release verification refuses worktree-only locked artifacts; pin the PD2P POC commit/tag first\n' >&2
+  printf 'release verification refuses worktree-only locked artifacts; pin the PD2/PD2P POC commit/tag first\n' >&2
   exit 1
 fi
 "$ROOT/tools/check_ls14_static_gate_record.sh"
+"$ROOT/tools/check_ls12_static_gate_record.sh"
 
-ionstack_pd2_commit=$(jq -r \
+ionstack_legacy_commit=$(jq -r \
   '.sources[] | select(.component == "ionstack") | .commit' \
+  "$ROOT/sources.lock.json")
+ionstack_pd2_commit=$(jq -r \
+  '.sources[] | select(.component == "ionstack-pd2") | .commit' \
   "$ROOT/sources.lock.json")
 ionstack_pd2p_commit=$(jq -r \
   '.sources[] | select(.component == "ionstack-pd2p") | .commit' \
   "$ROOT/sources.lock.json")
+upstream_legacy_profiles=$(git -C "$ROOT/../xpad2-ionstack-poc" show \
+  "$ionstack_legacy_commit:profiles/xpad2_profiles.json")
 upstream_pd2_profiles=$(git -C "$ROOT/../xpad2-ionstack-poc" show \
   "$ionstack_pd2_commit:profiles/xpad2_profiles.json")
+upstream_pd2_release_lock=$(git -C "$ROOT/../xpad2-ionstack-poc" show \
+  "$ionstack_pd2_commit:xpad2-release.lock.json")
 upstream_pd2p_profiles=$(git -C "$ROOT/../xpad2-ionstack-poc" show \
   "$ionstack_pd2p_commit:profiles/xpad2p_profiles.json")
 upstream_pd2p_release_lock=$(git -C "$ROOT/../xpad2-ionstack-poc" show \
   "$ionstack_pd2p_commit:xpad2p-release.lock.json")
 jq -e \
+  --argjson legacy "$upstream_legacy_profiles" \
   --argjson pd2 "$upstream_pd2_profiles" \
   --argjson pd2p "$upstream_pd2p_profiles" '
-  (.device_profiles[] | select(.id == "xpad2p")) as $device |
+  (.device_profiles[] | select(.id == "xpad2")) as $pd2_device |
+  (.device_profiles[] | select(.id == "xpad2p")) as $pd2p_device |
   ([.ionstack_profiles_v2[] | select(.device_profile_id == "xpad2") |
+      select(.id | startswith("xpad2-v19-")) |
       {name:.id,kernel_version}] | sort_by(.name)) ==
-    ([$pd2.profiles[] | select(.release) |
+    ([$legacy.profiles[] | select(.release and (.name | startswith("xpad2-v19-"))) |
       {name,kernel_version}] | sort_by(.name)) and
   ([.ionstack_discovery_profiles_v2[] |
-      select(.profile_id | startswith("xpad2-")) |
+      select(.profile_id | startswith("xpad2-v19-")) |
       {name:.profile_id,offsets}] | sort_by(.name)) ==
-    ([$pd2.profiles[] | select(.release) |
+    ([$legacy.profiles[] | select(.release and (.name | startswith("xpad2-v19-"))) |
       {name,offsets}] | sort_by(.name)) and
+  ([.ionstack_profiles_v2[] |
+      select(.id == $pd2.profile.name) |
+      {
+        name:.id,
+        exact_tuples,
+        kernel_versions:([.kernel_version] + (.kernel_version_alternates // [])
+          | sort)
+      }]) ==
+    [{
+      name:$pd2.profile.name,
+      exact_tuples:([$pd2.profile.exact_tuples[] |
+        {
+          fingerprint_incremental:.incremental,
+          kernel_version
+        }]),
+      kernel_versions:([$pd2.profile.exact_tuples[].kernel_version] | sort)
+    }] and
+  ([.ionstack_discovery_profiles_v2[] |
+      select(.profile_id == $pd2.profile.name) |
+      {name:.profile_id,offsets}]) ==
+    [{name:$pd2.profile.name,offsets:$pd2.profile.offsets}] and
+  $pd2_device.product_device == $pd2.device and
+  $pd2_device.build_fingerprint_prefix == $pd2.fingerprint_prefix and
+  $pd2_device.build_fingerprint_suffix == $pd2.fingerprint_suffix and
+  $pd2_device.fingerprint_incremental_min == $pd2.release_incremental_min and
+  $pd2_device.fingerprint_incremental_max == $pd2.release_incremental_max and
+  $pd2_device.kernel_release_prefix == $pd2.kernel_release and
   ([.ionstack_profiles_v2[] | select(.device_profile_id == "xpad2p") |
       {
         name:.id,
@@ -59,14 +97,34 @@ jq -e \
       select(.profile_id == $pd2p.profile.name) |
       {name:.profile_id,offsets}]) ==
     [{name:$pd2p.profile.name,offsets:$pd2p.profile.offsets}] and
-  $device.product_device == $pd2p.device and
-  $device.build_fingerprint_prefix == $pd2p.fingerprint_prefix and
-  $device.build_fingerprint_suffix == $pd2p.fingerprint_suffix and
-  $device.fingerprint_incremental_min == $pd2p.release_incremental_min and
-  $device.fingerprint_incremental_max == $pd2p.release_incremental_max and
-  $device.kernel_release_prefix == $pd2p.kernel_release
+  $pd2p_device.product_device == $pd2p.device and
+  $pd2p_device.build_fingerprint_prefix == $pd2p.fingerprint_prefix and
+  $pd2p_device.build_fingerprint_suffix == $pd2p.fingerprint_suffix and
+  $pd2p_device.fingerprint_incremental_min == $pd2p.release_incremental_min and
+  $pd2p_device.fingerprint_incremental_max == $pd2p.release_incremental_max and
+  $pd2p_device.kernel_release_prefix == $pd2p.kernel_release
 ' "$ROOT/assets.lock.json" >/dev/null || {
   printf 'signed PD2/PD2P IonStack catalog drifted from locked upstream sources\n' >&2
+  exit 1
+}
+jq -e \
+  --arg commit "$ionstack_pd2_commit" \
+  --argjson upstream "$upstream_pd2_release_lock" '
+  ([.artifacts[] |
+      select(.id == "ionstack-runner-xpad2-v260-v272" or
+        .id == "ionstack-preload-xpad2-v260-v272" or
+        .id == "ionstack-perf-target-xpad2" or
+        .id == "ionstack-chainwalk-probe-xpad2") |
+      {size,sha256}] | sort_by(.sha256)) ==
+    ([$upstream.artifacts[] | {size,sha256}] | sort_by(.sha256)) and
+  all(.artifacts[] |
+      select(.id == "ionstack-runner-xpad2-v260-v272" or
+        .id == "ionstack-preload-xpad2-v260-v272" or
+        .id == "ionstack-perf-target-xpad2" or
+        .id == "ionstack-chainwalk-probe-xpad2");
+      .version == $commit)
+' "$ROOT/assets.lock.json" >/dev/null || {
+  printf 'locked PD2 artifacts drifted from the POC release lock\n' >&2
   exit 1
 }
 jq -e \
@@ -252,6 +310,7 @@ for required in \
   licenses/xpad-installer-LICENSE \
   licenses/xpad2-ionstack-poc-LICENSE \
   licenses/xpad2-ionstack-poc-Apache-2.0-LICENSE \
+  static-validation/ls12-260-272.json \
   static-validation/ls14-262-272.json; do
   [[ -s "$package/$required" ]] || {
     printf 'release license material missing: %s\n' "$required" >&2

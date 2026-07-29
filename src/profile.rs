@@ -169,17 +169,18 @@ impl AssetsLock {
             }
         }
         if !self.device_profiles.iter().any(|profile| {
-            profile.build_fingerprint == self.profile.build_fingerprint
-                && profile.build_fingerprint_prefix == self.profile.build_fingerprint_prefix
+            profile.build_fingerprint_prefix == self.profile.build_fingerprint_prefix
                 && profile.build_fingerprint_suffix == self.profile.build_fingerprint_suffix
                 && profile.fingerprint_incremental_min == self.profile.fingerprint_incremental_min
-                && profile.fingerprint_incremental_max == self.profile.fingerprint_incremental_max
+                && profile.fingerprint_incremental_max >= self.profile.fingerprint_incremental_max
+                && profile
+                    .fingerprint_policy()
+                    .matches(&self.profile.build_fingerprint)
                 && profile.kernel_release_prefix == self.profile.kernel_release_prefix
-                && profile.kernel_version == self.profile.kernel_version
                 && profile.abi == self.profile.abi
         }) {
             return Err(msg(
-                "legacy compatibility profile must match one device-family identity",
+                "legacy compatibility profile must be contained by one device-family identity",
             ));
         }
         Ok(())
@@ -551,6 +552,9 @@ mod tests {
         let mut xpad2 = ranged_profile();
         xpad2.id = "xpad2".to_string();
         xpad2.product_device = "ls12_mt8797_wifi_64".to_string();
+        xpad2.build_fingerprint = format!("{PREFIX}272{SUFFIX}");
+        xpad2.fingerprint_incremental_max = 272;
+        xpad2.kernel_version = "#1 SMP PREEMPT Thu Jul 23 20:40:43 CST 2026".to_string();
 
         let xpad2p = DeviceProfile {
             id: "xpad2p".to_string(),
@@ -566,12 +570,28 @@ mod tests {
             late_load_supported: true,
             hooks_supported: true,
         };
-        let mut xpad2_profile = ionstack_profile(
-            "xpad2-v260",
-            "#1 SMP PREEMPT Mon Jun 29 04:08:29 CST 2026",
-            "260",
-        );
-        xpad2_profile.device_profile_id = "xpad2".to_string();
+        let xpad2_profile = IonStackProfile {
+            id: "xpad2-v260-v272".to_string(),
+            device_profile_id: "xpad2".to_string(),
+            kernel_version: "#1 SMP PREEMPT Thu Jul 23 20:40:43 CST 2026".to_string(),
+            kernel_version_alternates: vec![
+                "#1 SMP PREEMPT Mon Jun 29 04:08:29 CST 2026".to_string(),
+            ],
+            exact_tuples: vec![
+                crate::model::IonStackExactTuple {
+                    fingerprint_incremental: 260,
+                    kernel_version: "#1 SMP PREEMPT Mon Jun 29 04:08:29 CST 2026".to_string(),
+                },
+                crate::model::IonStackExactTuple {
+                    fingerprint_incremental: 272,
+                    kernel_version: "#1 SMP PREEMPT Thu Jul 23 20:40:43 CST 2026".to_string(),
+                },
+            ],
+            runner_artifact: "runner-xpad2".to_string(),
+            perf_target_artifact: "perf-xpad2".to_string(),
+            preload_artifact: "preload-xpad2".to_string(),
+            chainwalk_probe_artifact: "probe-xpad2".to_string(),
+        };
         let xpad2p_profile = IonStackProfile {
             id: "xpad2p-v262-v272".to_string(),
             device_profile_id: "xpad2p".to_string(),
@@ -604,7 +624,7 @@ mod tests {
             ionstack_discovery_profiles: Vec::new(),
             ionstack_profiles_v2: vec![xpad2_profile, xpad2p_profile],
             ionstack_discovery_profiles_v2: vec![
-                discovery_profile("xpad2-v260", "0x00be4c48"),
+                discovery_profile("xpad2-v260-v272", "0x00be4c48"),
                 discovery_profile("xpad2p-v262-v272", "0x00be0b18"),
             ],
             artifacts: Vec::new(),
@@ -854,6 +874,25 @@ mod tests {
             .unwrap();
         assert_eq!(ls12.profile_id(), "xpad2");
         assert!(ls12.late_load_supported);
+        let ls12_272_fingerprint = format!("{PREFIX}272{SUFFIX}");
+        let ls12_272 = lock
+            .ionstack_artifacts(
+                "xpad2",
+                "#1 SMP PREEMPT Thu Jul 23 20:40:43 CST 2026",
+                Some(272),
+            )
+            .unwrap();
+        assert_eq!(ls12_272.profile_id, "xpad2-v260-v272");
+        assert_eq!(ls12_272.runner, "runner-xpad2");
+        assert!(
+            lock.selected_technical_profile(
+                &ls12_272_fingerprint,
+                "ls12_mt8797_wifi_64",
+                "4.19.191+",
+                "arm64-v8a",
+            )
+            .is_some()
+        );
 
         let ls14_fingerprint = format!("{PLUS_PREFIX}272{SUFFIX}");
         let ls14 = lock
@@ -888,6 +927,59 @@ mod tests {
     }
 
     #[test]
+    fn xpad2_260_and_272_share_one_isolated_artifact_profile() {
+        let lock = unified_lock();
+        for (incremental, kernel_version) in [
+            (260, "#1 SMP PREEMPT Mon Jun 29 04:08:29 CST 2026"),
+            (272, "#1 SMP PREEMPT Thu Jul 23 20:40:43 CST 2026"),
+        ] {
+            let artifacts = lock
+                .ionstack_artifacts("xpad2", kernel_version, Some(incremental))
+                .unwrap();
+            assert_eq!(artifacts.profile_id, "xpad2-v260-v272");
+            assert_eq!(artifacts.runner, "runner-xpad2");
+        }
+        assert!(
+            lock.ionstack_artifacts(
+                "xpad2",
+                "#1 SMP PREEMPT Thu Jul 23 20:40:43 CST 2026",
+                Some(260),
+            )
+            .is_none()
+        );
+        assert_eq!(lock.ionstack_discovery_target("xpad2"), Some("perf-xpad2"));
+    }
+
+    #[test]
+    fn xpad2_root_range_is_19_through_272_only() {
+        let lock = unified_lock();
+        for incremental in [19, 260, 272] {
+            let fingerprint = format!("{PREFIX}{incremental}{SUFFIX}");
+            assert!(
+                lock.selected_technical_profile(
+                    &fingerprint,
+                    "ls12_mt8797_wifi_64",
+                    "4.19.191",
+                    "arm64-v8a",
+                )
+                .is_some()
+            );
+        }
+        for incremental in [18, 273] {
+            let fingerprint = format!("{PREFIX}{incremental}{SUFFIX}");
+            assert!(
+                lock.selected_technical_profile(
+                    &fingerprint,
+                    "ls12_mt8797_wifi_64",
+                    "4.19.191",
+                    "arm64-v8a",
+                )
+                .is_none()
+            );
+        }
+    }
+
+    #[test]
     fn xpad2p_262_and_272_share_one_isolated_artifact_profile() {
         let lock = unified_lock();
         for (incremental, kernel_version) in [
@@ -912,7 +1004,7 @@ mod tests {
             lock.ionstack_discovery_target("xpad2p"),
             Some("perf-xpad2p")
         );
-        assert_eq!(lock.ionstack_discovery_target("xpad2"), Some("perf"));
+        assert_eq!(lock.ionstack_discovery_target("xpad2"), Some("perf-xpad2"));
     }
 
     #[test]
@@ -994,8 +1086,8 @@ mod tests {
         )))
         .unwrap();
         assert_eq!(legacy.schema, 1);
-        assert_eq!(legacy.product_version, "0.7.2");
-        assert_eq!(legacy.catalog_version, "2026-07-28.3");
+        assert_eq!(legacy.product_version, "0.7.3");
+        assert_eq!(legacy.catalog_version, "2026-07-29.1");
         assert!(legacy.profile.build_fingerprint.contains("/260:"));
         assert_eq!(legacy.profile.kernel_release_prefix, "4.19.191");
         assert_eq!(legacy.profile.abi, "arm64-v8a");

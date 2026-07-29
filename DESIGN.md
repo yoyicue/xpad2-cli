@@ -1,6 +1,7 @@
 # XPad2 CLI 设计
 
-状态：v0.7.2 已实现；v0.1.1 完成 BoomInstaller 依赖身份和公开分发材料，v0.1.2
+状态：v0.7.3 发布 PD2 `/272` 支持，并固定独立的 POC v1.4.0 制品；
+v0.1.1 完成 BoomInstaller 依赖身份和公开分发材料，v0.1.2
 增加可验证的 OTA 冻结策略与 Root 前强制门禁，v0.1.3 对齐 KernelSU 驱动与
 官方生产签名 Manager 的 32547 构建号，v0.1.4 升级 late-load v0.2.1，恢复
 `u:r:ksu:s0` Manager Root 且保持全局 SELinux Enforcing；v0.1.5 将 BoomInstaller
@@ -78,7 +79,8 @@ device payload 继续是两个独立制品，CLI 仅统一调度，不合并 off
 Hook 已通过发布静态门禁：LS14 两个内核的 config/kallsyms 相同，KSU 137 与 SUU 141
 个导入全部存在，模块 CRC/vermagic 一致，且 9 个 Hook 核心 userspace 文件与 LS12/260
 逐字节相同。静态记录必须与 catalog 锁定哈希一致；PD2P artifact 固定到 POC v1.3.0，
-PD2 继续固定到 POC v1.2.0。
+PD2 的历史 `/19` profile 保留 POC v1.2.0，新的 `/260`–`/272` profile 固定到
+POC v1.4.0。
 v0.7.1 将 signed catalog 的 `profile`、`ionstack_profiles` 与
 `ionstack_discovery_profiles` 保持为 v0.6.1 严格解析器可读的 legacy 投影；统一设备族
 字段和四套完整 profile 放入新增的 v2 顶层字段。v0.6.1 updater 因此可以先验证新 catalog，
@@ -86,6 +88,12 @@ v0.7.1 将 signed catalog 的 `profile`、`ionstack_profiles` 与
 v0.7.2 使用实际上游制品名 `vector` 作为规范 Hook 组件 ID；历史命令 `lsposed` 只在输入
 边界归一化为 `vector`。KSU 与 SUU 路径继续安装同一锁定 Vector v2.0，状态、日志和新事务
 回执不再把 Vector 标成 LSPosed，现有 Hook、Root 与 IonStack 制品均不变。
+v0.7.3 将 LS12/PD2 Root 范围扩为 canonical `/19`–`/272`，并新增 `/260`、`/272`
+精确元组共用的隔离 profile。两个内核的 config 与 absolute kallsyms 完全一致，
+未压缩 Image 仅有 48 字节构建元数据差异；KSU/SUU 导入、`module_layout` CRC、
+vermagic 以及 9 个 Hook 核心文件均通过静态门禁。旧 `/19` profile 保留原执行链，
+但同一设备族共享新的签名只读 perf discovery target；runner、preload 与 chainwalk
+probe 仍必须同源。精确 `/260` 继续仅作为旧 updater 的兼容投影。
 
 验收覆盖单 ELF、只读状态探针、3-worker IonStack 临时 Root、KSU/SUU late-load、
 CLI/APK 身份验证、临时 Root 安全收口、同 boot 幂等重跑、普通重启后恢复、RSA 签名
@@ -204,7 +212,7 @@ xpad2-cli 集成仓库
 组件仓库发布
 -> 更新 assets.lock.json / sources.lock.json
 -> 构建新的 xpad2
--> XPad2 产品族门 + `/19`–`/260` Root 门；/260 真机 install full/suu-full、重跑、重启恢复和失败收尾验证
+-> XPad2 产品族门 + LS12/LS14 `/19`–`/272` Root 门；对应真机 install full/suu-full、重跑、重启恢复和失败收尾验证
 -> 发布新的 XPad2 版本
 ```
 
@@ -423,7 +431,8 @@ xpad2 logs export DIRECTORY
 ```text
 1. 获取全局 operation lock
 2. 记录 Boot ID、SELinux、现有 Root、KSU/SUU 和组件状态
-3. 校验 XPad2 产品族和制品锁；runtime 请求再校验 `/19`–`/260`、`4.19.191` 与 ABI
+3. 校验 XPad2 产品族和制品锁；runtime 请求再按设备族校验 `/19`–`/272`、
+   `4.19.191` 与 ABI
 4. 冻结并复验 XPad2 OTA 主包；失败则停止
 5. 安装并验签所选 runtime 对应的官方 Manager；SUU 必须在模块注册前固定 Manager 身份
 6. 如果所选 runtime 已健康加载，跳过临时 Root 和 late-load
@@ -628,7 +637,7 @@ repository 的 uploaded asset API URL，再由 API 重定向到 release-assets�
 `github.com:443` 不可达但 API/asset 域可达的网络上仍能工作。API metadata 是不可信的
 运输索引，必须与签名 manifest 里的 tag、文件名、大小和可用 digest 交叉验证。
 manifest 使用严格字段集合，锁定 schema/kind/channel/repository、目标 semver、catalog
-版本、签名 `/19`–`/260` profile，以及 ELF、legacy cache ZIP、catalog 的文件名、大小、
+版本、精确 `/260` legacy 兼容 profile，以及 ELF、legacy cache ZIP、catalog 的文件名、大小、
 SHA-256 和 HTTPS URL。独立 `catalog.sig` 直接验证候选内嵌 catalog。可选的
 `xpad2-deltas.json` 与相邻签名使用同一 production RSA identity，严格绑定目标 manifest
 中的 ELF 身份，并为每个基线锁定版本、大小、SHA-256 及 canonical patch asset。只有两份
@@ -783,15 +792,16 @@ licenses/
 完全一致，不能成为第二条版本线。固定名 update manifest 和 delta index 供 Latest Release
 发现；delta 只优化传输，不是独立版本线或信任根。
 
-## 14. v0.7.2 验收标准
+## 14. v0.7.3 验收标准
 
 1. 单个 `xpad2` ELF 可以被推送到 `/data/local/tmp` 并正常执行。
 2. `status` 和 `doctor` 不进行 Root 或持久修改。
 3. `freeze ota`/`unfreeze ota` 幂等且只改变锁定的系统 OTA 主包。
 4. 所有 Root 入口在 IonStack 前完成 OTA 冻结，冻结失败时不进入利用链。
-5. canonical `/19`–`/260` fingerprint profile 可以进入控制面；三种精确 kernel build
-   分别快速选择 v19-a/v19-b/v260 runner/preload。未知 build 进入只读 discovery；两个
-   独立 anchor 唯一选型并完成 preflight/validate 后才进入写入，未知或冲突证据安全停止。
+5. canonical `/19`–`/272` fingerprint profile 可以进入控制面；LS12 四个精确元组
+   分别快速选择 v19-a/v19-b 或共用的 v260-v272 runner/preload。未知 build 进入只读
+   discovery；两个独立 anchor 唯一选型并完成 preflight/validate 后才进入写入，未知
+   或冲突证据安全停止。
 6. 两个 profile 分别激活锁定 KSU/SUU 和对应 Manager；APK 身份、`xpad-install` 哈希正确。
 7. 完成后 SELinux 为 Enforcing，安装事务创建的临时 Root 窗口已关闭。
 8. 再次执行同一 profile 能根据真实状态跳过完成项，不重复 Root 或重装。
@@ -838,15 +848,16 @@ licenses/
 41. 候选安装前存在同目录原子回滚副本；候选验证失败后恢复 ELF 精确哈希，且
     `last-self-update.json` 指向的永久备份不会被同次回收删除。
 42. fingerprint 固定前缀与 `:user/release-keys` 后缀不变；产品族门接受 canonical 数字
-    incremental 和 arm64，Root 门对 LS12 只接受 19–260、对 LS14 只接受 19–272，
+    incremental 和 arm64，Root 门对 LS12 与 LS14 都只接受 19–272，
     两者都要求 `4.19.191`。范围外构建可运行 update/OTA/installer/Manager 控制面但
     不可进入 IonStack；前导零、
     符号、溢出、尾随字符、错误产品前缀或 ABI 在产品族门拒绝。
     fingerprint Root 范围不能直接决定 kernel offsets；范围内未知 `uname -v` 必须由至少
     两个独立动态 anchor 唯一选型，并先完成无写入 validate。
-43. v0.7.2 的 signed catalog 以 v2 顶层字段携带三套 PD2 与一套 PD2P IonStack profile
-    映射及对应 discovery offsets；legacy 字段保持 v0.6.1 严格 schema，update manifest 仅携带
-    精确 `/260` 兼容锚点；v0.4.14 会忽略未知 catalog 顶层字段，仍能在 /260 上完成升级。
+43. v0.7.3 的 signed catalog 以 v2 顶层字段携带两个历史 PD2 `/19` profile、一个
+    PD2 `/260`–`/272` 共用 profile 和一个 PD2P profile 及对应 discovery offsets；
+    legacy 字段保持 v0.6.1 严格 schema，update manifest 仅携带精确 `/260` 兼容锚点；
+    v0.4.14 会忽略未知 catalog 顶层字段，仍能在 /260 上完成升级。
 44. BoomInstaller Provider 必须同时报告 ready、配对密钥存在且可解密、paired，并区分
     network-untrusted、wireless-adb-not-started、key-invalid 与 pending-reboot；仅凭进程和
     Settings 值不能判定自启动健康。

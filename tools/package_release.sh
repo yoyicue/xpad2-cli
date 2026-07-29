@@ -10,6 +10,7 @@ ARTIFACT_DIR=${XPAD2_ARTIFACT_DIR:-}
 IONSTACK_SOURCE=${XPAD2_IONSTACK_SOURCE:-$PARENT/xpad2-ionstack-poc}
 IONSTACK_PD2_SOURCE=${XPAD2_IONSTACK_PD2_SOURCE:-$IONSTACK_SOURCE}
 IONSTACK_PD2P_SOURCE=${XPAD2_IONSTACK_PD2P_SOURCE:-$IONSTACK_SOURCE}
+IONSTACK_LEGACY_SOURCE=${XPAD2_IONSTACK_LEGACY_SOURCE:-$PARENT/xpad2-ionstack-release}
 DIST="$ROOT/dist"
 STAGE="$DIST/.stage-v$VERSION"
 PACKAGE="$STAGE/xpad2-v$VERSION-android-arm64"
@@ -48,10 +49,11 @@ sha256_file() {
 
 if jq -e 'any(.artifacts[]; .version | contains("-worktree-"))' \
   "$ROOT/assets.lock.json" >/dev/null; then
-  printf 'release packaging refuses worktree-only locked artifacts; pin the PD2P POC commit/tag first\n' >&2
+  printf 'release packaging refuses worktree-only locked artifacts; pin the PD2/PD2P POC commit/tag first\n' >&2
   exit 1
 fi
 "$ROOT/tools/check_ls14_static_gate_record.sh"
+"$ROOT/tools/check_ls12_static_gate_record.sh"
 
 source_for() {
   local id=$1 filename=$2 candidate
@@ -64,18 +66,22 @@ source_for() {
     done
   fi
   case "$id" in
+    ionstack-runner-xpad2-v260-v272) printf '%s\n' "$IONSTACK_PD2_SOURCE/build/xpad2/ionstack_reroot_device" ;;
+    ionstack-preload-xpad2-v260-v272) printf '%s\n' "$IONSTACK_PD2_SOURCE/build/xpad2/ionstack_preload.so" ;;
+    ionstack-perf-target-xpad2) printf '%s\n' "$IONSTACK_PD2_SOURCE/build/xpad2/ionstack_perf_target" ;;
+    ionstack-chainwalk-probe-xpad2) printf '%s\n' "$IONSTACK_PD2_SOURCE/build/xpad2/cve_2026_43499_chainwalk_probe_arm32" ;;
     ionstack-runner-xpad2p-v262-v272) printf '%s\n' "$IONSTACK_PD2P_SOURCE/build/xpad2p/ionstack_reroot_device" ;;
     ionstack-preload-xpad2p-v262-v272) printf '%s\n' "$IONSTACK_PD2P_SOURCE/build/xpad2p/ionstack_preload.so" ;;
     ionstack-perf-target-xpad2p) printf '%s\n' "$IONSTACK_PD2P_SOURCE/build/xpad2p/ionstack_perf_target" ;;
     ionstack-chainwalk-probe-xpad2p) printf '%s\n' "$IONSTACK_PD2P_SOURCE/build/xpad2p/cve_2026_43499_chainwalk_probe_arm32" ;;
-    ionstack-runner-v19-a) printf '%s\n' "$IONSTACK_PD2_SOURCE/dist/xpad2-19-260/profiles/xpad2-v19-a/ionstack_reroot_device" ;;
-    ionstack-preload-v19-a) printf '%s\n' "$IONSTACK_PD2_SOURCE/dist/xpad2-19-260/profiles/xpad2-v19-a/ionstack_preload.so" ;;
-    ionstack-runner-v19-b) printf '%s\n' "$IONSTACK_PD2_SOURCE/dist/xpad2-19-260/profiles/xpad2-v19-b/ionstack_reroot_device" ;;
-    ionstack-preload-v19-b) printf '%s\n' "$IONSTACK_PD2_SOURCE/dist/xpad2-19-260/profiles/xpad2-v19-b/ionstack_preload.so" ;;
-    ionstack-runner-v260) printf '%s\n' "$IONSTACK_PD2_SOURCE/dist/xpad2-19-260/profiles/xpad2-v260/ionstack_reroot_device" ;;
-    ionstack-preload-v260) printf '%s\n' "$IONSTACK_PD2_SOURCE/dist/xpad2-19-260/profiles/xpad2-v260/ionstack_preload.so" ;;
-    ionstack-perf-target) printf '%s\n' "$IONSTACK_PD2_SOURCE/dist/xpad2-19-260/profiles/xpad2-v260/ionstack_perf_target" ;;
-    ionstack-chainwalk-probe) printf '%s\n' "$IONSTACK_PD2_SOURCE/dist/xpad2-19-260/profiles/xpad2-v260/cve_2026_43499_chainwalk_probe_arm32" ;;
+    ionstack-runner-v19-a) printf '%s\n' "$IONSTACK_LEGACY_SOURCE/dist/xpad2-19-260/profiles/xpad2-v19-a/ionstack_reroot_device" ;;
+    ionstack-preload-v19-a) printf '%s\n' "$IONSTACK_LEGACY_SOURCE/dist/xpad2-19-260/profiles/xpad2-v19-a/ionstack_preload.so" ;;
+    ionstack-runner-v19-b) printf '%s\n' "$IONSTACK_LEGACY_SOURCE/dist/xpad2-19-260/profiles/xpad2-v19-b/ionstack_reroot_device" ;;
+    ionstack-preload-v19-b) printf '%s\n' "$IONSTACK_LEGACY_SOURCE/dist/xpad2-19-260/profiles/xpad2-v19-b/ionstack_preload.so" ;;
+    ionstack-runner-v260) printf '%s\n' "$IONSTACK_LEGACY_SOURCE/dist/xpad2-19-260/profiles/xpad2-v260/ionstack_reroot_device" ;;
+    ionstack-preload-v260) printf '%s\n' "$IONSTACK_LEGACY_SOURCE/dist/xpad2-19-260/profiles/xpad2-v260/ionstack_preload.so" ;;
+    ionstack-perf-target) printf '%s\n' "$IONSTACK_LEGACY_SOURCE/dist/xpad2-19-260/profiles/xpad2-v260/ionstack_perf_target" ;;
+    ionstack-chainwalk-probe) printf '%s\n' "$IONSTACK_LEGACY_SOURCE/dist/xpad2-19-260/profiles/xpad2-v260/cve_2026_43499_chainwalk_probe_arm32" ;;
     ksud) printf '%s\n' "$PARENT/xpad2-ksu-lateload/artifacts/ksud-xpad2" ;;
     suu-ksud) printf '%s\n' "$PARENT/xpad2-sukisu-lateload/artifacts/ksud-sukisu-xpad2" ;;
     ksu-manager) printf '%s\n' "$PARENT/xpad2-reroot-android/app/src/main/res/raw/kernelsu_manager_v3_2_5_22_gccfee6dc_32547.apk" ;;
@@ -118,6 +124,7 @@ cp "$ROOT/README.md" "$ROOT/BEGINNER_GUIDE.md" "$ROOT/DESIGN.md" \
   "$ROOT/sources.lock.json" "$PACKAGE/"
 mkdir -p "$PACKAGE/static-validation"
 cp "$ROOT/static-validation/ls14-262-272.json" "$PACKAGE/static-validation/"
+cp "$ROOT/static-validation/ls12-260-272.json" "$PACKAGE/static-validation/"
 
 cp "$IONSTACK_PD2P_SOURCE/LICENSE" "$PACKAGE/licenses/xpad2-ionstack-poc-LICENSE"
 cp "$IONSTACK_PD2P_SOURCE/NOTICE" "$PACKAGE/licenses/xpad2-ionstack-poc-NOTICE"

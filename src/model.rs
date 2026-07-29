@@ -31,9 +31,9 @@ pub struct DeviceProfile {
     pub id: String,
     #[serde(default)]
     pub product_device: String,
-    // Compatibility anchor consumed by pre-range updaters. It remains the
-    // exact upper-bound /260 fingerprint even when the signed catalog also
-    // carries the canonical incremental range below.
+    // Compatibility anchor consumed by pre-range updaters. The legacy top-
+    // level profile remains exact /260 even when a device-family profile
+    // carries the independently validated /19-/272 range.
     pub build_fingerprint: String,
     #[serde(default)]
     pub build_fingerprint_prefix: String,

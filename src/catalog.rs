@@ -106,7 +106,11 @@ impl Catalog {
                     profile.id
                 )));
             }
-            let mut source_version = None;
+            // The perf target is a read-only discovery helper and is intentionally
+            // shared by every compatibility profile in one device family. Keep the
+            // executable chain (runner, preload, and chainwalk probe) pinned to one
+            // source version, but allow that signed helper to be rebuilt separately.
+            let mut chain_source_version = None;
             for id in role_ids {
                 let artifact = lock
                     .artifacts
@@ -124,14 +128,16 @@ impl Catalog {
                         profile.id, id
                     )));
                 }
-                match source_version {
-                    None => source_version = Some(artifact.version.as_str()),
-                    Some(version) if version == artifact.version.as_str() => {}
-                    Some(_) => {
-                        return Err(msg(format!(
-                            "IonStack profile {} mixes artifacts from different source versions",
-                            profile.id
-                        )));
+                if id != &profile.perf_target_artifact {
+                    match chain_source_version {
+                        None => chain_source_version = Some(artifact.version.as_str()),
+                        Some(version) if version == artifact.version.as_str() => {}
+                        Some(_) => {
+                            return Err(msg(format!(
+                                "IonStack profile {} mixes executable-chain artifacts from different source versions",
+                                profile.id
+                            )));
+                        }
                     }
                 }
             }
