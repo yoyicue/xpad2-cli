@@ -153,7 +153,9 @@ IonStack 临时 Root 通常需要数分钟，使用历史真机数据收敛出�
 
 显式 `xpad2 root` 会保留临时 Root，并打印 SELinux 状态。完成操作后必须执行
 `xpad2 cleanup` 或普通重启。`install ksu/full/suu/suu-full` 自己创建或接管的临时 Root 默认安全关闭，
-并独立验证 SELinux Enforcing、socket 和 client 均已清理。
+并独立验证 SELinux Enforcing、`@ionstack_temp_su` 抽象监听 socket 和 client 均已清理。
+v0.7.4 同时按 daemon 的真实 `su --daemonize` argv 精确终止进程；文件路径消失但抽象
+socket 仍在监听会报告 `Broken`，不会冒充清理成功。
 
 所有 Root 入口都会先冻结设备正在运行的系统 OTA 主包 `com.tal.pad.ota`，确认
 PackageManager user 0 状态不可运行后才允许启动 IonStack。冻结失败时 Root 安全失败，
@@ -230,7 +232,7 @@ cache ZIP；该 ZIP 只为旧 updater 和独立离线导入保留。目标 ELF �
 ```sh
 xpad2 update --check             # 只检查，不下载大文件、不修改设备
 xpad2 update                     # 更新到最新稳定版
-xpad2 update --version 0.7.3     # 选择精确发布版本
+xpad2 update --version 0.7.4     # 选择精确发布版本
 xpad2 update --reinstall         # 同版本修复性重装
 xpad2 update --offline FILE.zip  # 无网络时使用完整离线更新包
 ```

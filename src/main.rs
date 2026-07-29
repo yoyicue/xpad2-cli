@@ -504,7 +504,7 @@ fn command_cleanup(catalog: &Catalog, paths: &Paths) -> Result<()> {
     let started_boot = boot_id();
     let started_selinux = selinux();
     let mut installer_cleanup_error: Option<Error> = None;
-    if device::root_status().state == ComponentState::Active {
+    if device::root_status().state == ComponentState::Active || device::temp_root_socket_present() {
         let session = root::RootSession {
             owned: true,
             started_boot_id: started_boot.clone(),

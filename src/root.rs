@@ -108,6 +108,11 @@ impl RootSession {
                 "a stale root daemon (pid {pid}) is alive but its client cannot verify root; refusing to stack another exploit session"
             )));
         }
+        if device::temp_root_socket_present() {
+            return Err(needs_reboot(
+                "a stale @ionstack_temp_su listener remains without a verified client; refusing to stack another exploit session",
+            ));
+        }
 
         cleanup_stale_shell_files();
         let _chain_files = ChainFilesGuard;
@@ -300,7 +305,13 @@ pid=$(sed -n 's/^su daemon ready pid=\([0-9][0-9]*\).*/\1/p' /data/local/tmp/su_
 if [ -n "$pid" ] && [ -r "/proc/$pid/cmdline" ]; then
   cmd=$(tr '\000' ' ' < "/proc/$pid/cmdline" 2>/dev/null)
   case "$cmd" in
-    *"/data/local/tmp/su --daemonize"*) kill "$pid" 2>/dev/null || true ;;
+    "su --daemonize "*|"su --daemon "*|*"/data/local/tmp/su --daemonize"*|*"/data/local/tmp/su --daemon"*)
+      kill "$pid" 2>/dev/null || true
+      for wait_round in 1 2 3 4 5; do
+        [ ! -d "/proc/$pid" ] && break
+        sleep 1
+      done
+      ;;
   esac
 fi
 rm -f /data/local/tmp/temp_su.sock /data/local/tmp/su /data/local/tmp/su_daemon.log
@@ -316,7 +327,7 @@ setenforce 1 >/dev/null 2>&1 || true
         thread::sleep(Duration::from_millis(250));
         let enforcing = selinux();
         let root = device::root_status();
-        let socket_absent = !Path::new(SOCKET).exists();
+        let socket_absent = !device::temp_root_socket_present();
         if enforcing != "Enforcing" || root.state == ComponentState::Active || !socket_absent {
             return Err(needs_reboot(format!(
                 "temporary root cleanup did not reach the safe state (SELinux={enforcing}, root={}, socket_absent={socket_absent})",
@@ -769,9 +780,17 @@ fn stale_daemon_pid() -> Option<u32> {
     })?;
     let command = fs::read(format!("/proc/{pid}/cmdline")).ok()?;
     let command = String::from_utf8_lossy(&command).replace('\0', " ");
-    command
-        .contains("/data/local/tmp/su --daemonize")
-        .then_some(pid)
+    temp_su_daemon_command(&command).then_some(pid)
+}
+
+fn temp_su_daemon_command(command: &str) -> bool {
+    matches!(
+        command.trim(),
+        "su --daemonize"
+            | "su --daemon"
+            | "/data/local/tmp/su --daemonize"
+            | "/data/local/tmp/su --daemon"
+    )
 }
 
 #[cfg(test)]
@@ -880,5 +899,19 @@ mod tests {
             .is_ok()
         );
         assert!(require_complete_state("[reroot] PREFLIGHT_OK", "preflight").is_err());
+    }
+
+    #[test]
+    fn recognizes_real_temp_su_daemon_argv() {
+        for command in [
+            "su --daemonize ",
+            "su --daemon ",
+            "/data/local/tmp/su --daemonize ",
+            "/data/local/tmp/su --daemon ",
+        ] {
+            assert!(temp_su_daemon_command(command), "{command}");
+        }
+        assert!(!temp_su_daemon_command("su -c id "));
+        assert!(!temp_su_daemon_command("other --daemonize "));
     }
 }

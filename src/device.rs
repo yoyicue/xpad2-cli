@@ -12,6 +12,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const SU: &str = "/data/local/tmp/su";
+const TEMP_SU_ABSTRACT_SOCKET: &str = "@ionstack_temp_su";
 
 pub struct RuntimeSpec {
     pub id: &'static str,
@@ -72,6 +73,13 @@ pub fn runtime_spec(id: &str) -> Option<&'static RuntimeSpec> {
 
 pub fn root_status() -> ComponentStatus {
     if !executable_exists(Path::new(SU)) {
+        if temp_root_socket_present() {
+            return status(
+                "temporary-root",
+                ComponentState::Broken,
+                Some("temporary Root client is absent but @ionstack_temp_su is still listening"),
+            );
+        }
         return status("temporary-root", ComponentState::Absent, None);
     }
     match run(SU, &["-c", "id"]) {
@@ -102,6 +110,18 @@ pub fn root_status() -> ComponentStatus {
             Some(&error.to_string()),
         ),
     }
+}
+
+fn abstract_socket_listed(table: &str, name: &str) -> bool {
+    table
+        .lines()
+        .any(|line| line.split_whitespace().last() == Some(name))
+}
+
+pub fn temp_root_socket_present() -> bool {
+    fs::read_to_string("/proc/net/unix")
+        .map(|table| abstract_socket_listed(&table, TEMP_SU_ABSTRACT_SOCKET))
+        .unwrap_or(true)
 }
 
 pub fn ksu_status(paths: &Paths) -> ComponentStatus {
@@ -1030,5 +1050,19 @@ mod tests {
             Some(2000)
         );
         assert_eq!(parse_proc_status_uid("Name:\tmissing\n"), None);
+    }
+
+    #[test]
+    fn abstract_temp_root_socket_match_is_exact() {
+        let table = "\
+Num RefCount Protocol Flags Type St Inode Path\n\
+0000: 00000002 00000000 00010000 0001 01 140128 @ionstack_temp_su\n\
+0001: 00000002 00000000 00010000 0001 01 140129 @ionstack_temp_su_old\n";
+        assert!(abstract_socket_listed(table, "@ionstack_temp_su"));
+        assert!(!abstract_socket_listed(table, "@missing"));
+        assert!(!abstract_socket_listed(
+            "0001: 00000002 00000000 00010000 0001 01 140129 @ionstack_temp_su_old\n",
+            "@ionstack_temp_su"
+        ));
     }
 }

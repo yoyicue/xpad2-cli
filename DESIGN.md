@@ -1,6 +1,6 @@
 # XPad2 CLI 设计
 
-状态：v0.7.3 发布 PD2 `/272` 支持，并固定独立的 POC v1.4.0 制品；
+状态：v0.7.4 修复临时 Root daemon 的真实 argv 识别与抽象 socket 收口验证；
 v0.1.1 完成 BoomInstaller 依赖身份和公开分发材料，v0.1.2
 增加可验证的 OTA 冻结策略与 Root 前强制门禁，v0.1.3 对齐 KernelSU 驱动与
 官方生产签名 Manager 的 32547 构建号，v0.1.4 升级 late-load v0.2.1，恢复
@@ -94,6 +94,9 @@ v0.7.3 将 LS12/PD2 Root 范围扩为 canonical `/19`–`/272`，并新增 `/260
 vermagic 以及 9 个 Hook 核心文件均通过静态门禁。旧 `/19` profile 保留原执行链，
 但同一设备族共享新的签名只读 perf discovery target；runner、preload 与 chainwalk
 probe 仍必须同源。精确 `/260` 继续仅作为旧 updater 的兼容投影。
+v0.7.4 按临时 daemon 的真实 `su --daemonize` argv 精确终止进程并等待退出；收尾与
+状态探针改为检查 `/proc/net/unix` 中的 `@ionstack_temp_su` 抽象监听 socket。仅删除
+filesystem client 不再算成功，残留监听会报告 `Broken` 并要求清理或普通重启。
 
 验收覆盖单 ELF、只读状态探针、3-worker IonStack 临时 Root、KSU/SUU late-load、
 CLI/APK 身份验证、临时 Root 安全收口、同 boot 幂等重跑、普通重启后恢复、RSA 签名
@@ -446,7 +449,7 @@ xpad2 logs export DIRECTORY
 13. 所有 APK 事务结束后再次幂等收敛并验证 0044 anchor
 14. 验证 OTA、所选 runtime 与全部制品目标状态
 15. 恢复 SELinux Enforcing
-16. 关闭安装事务创建的临时 su daemon/socket/client
+16. 关闭安装事务创建的临时 su daemon/client，并确认 `@ionstack_temp_su` 抽象监听消失
 17. 写入事务收据和日志，释放 operation lock
 ```
 
@@ -792,7 +795,7 @@ licenses/
 完全一致，不能成为第二条版本线。固定名 update manifest 和 delta index 供 Latest Release
 发现；delta 只优化传输，不是独立版本线或信任根。
 
-## 14. v0.7.3 验收标准
+## 14. v0.7.4 验收标准
 
 1. 单个 `xpad2` ELF 可以被推送到 `/data/local/tmp` 并正常执行。
 2. `status` 和 `doctor` 不进行 Root 或持久修改。
@@ -803,7 +806,8 @@ licenses/
    discovery；两个独立 anchor 唯一选型并完成 preflight/validate 后才进入写入，未知
    或冲突证据安全停止。
 6. 两个 profile 分别激活锁定 KSU/SUU 和对应 Manager；APK 身份、`xpad-install` 哈希正确。
-7. 完成后 SELinux 为 Enforcing，安装事务创建的临时 Root 窗口已关闭。
+7. 完成后 SELinux 为 Enforcing，安装事务创建的临时 Root client、daemon 和
+   `@ionstack_temp_su` 抽象监听均已消失；仅 filesystem 路径缺失不得判为成功。
 8. 再次执行同一 profile 能根据真实状态跳过完成项，不重复 Root 或重装。
 9. 普通重启后 runtime 变为 inactive，但 OTA 冻结、APK 和 CLI 制品仍在；再次执行可只恢复 runtime。
 10. 从显式本地缓存目录离线完成相同安装，缓存损坏时安全失败。
@@ -854,7 +858,7 @@ licenses/
     符号、溢出、尾随字符、错误产品前缀或 ABI 在产品族门拒绝。
     fingerprint Root 范围不能直接决定 kernel offsets；范围内未知 `uname -v` 必须由至少
     两个独立动态 anchor 唯一选型，并先完成无写入 validate。
-43. v0.7.3 的 signed catalog 以 v2 顶层字段携带两个历史 PD2 `/19` profile、一个
+43. v0.7.4 的 signed catalog 以 v2 顶层字段携带两个历史 PD2 `/19` profile、一个
     PD2 `/260`–`/272` 共用 profile 和一个 PD2P profile 及对应 discovery offsets；
     legacy 字段保持 v0.6.1 严格 schema，update manifest 仅携带精确 `/260` 兼容锚点；
     v0.4.14 会忽略未知 catalog 顶层字段，仍能在 /260 上完成升级。

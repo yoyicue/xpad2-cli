@@ -83,33 +83,33 @@ adb shell /data/local/tmp/xpad2 version
 手工恢复；恢复文件必须来自 GitHub Latest，不能照搬历史 tag 内的旧指南。
 
 当前正式版本是
-[`v0.7.3`](https://github.com/yoyicue/xpad2-cli/releases/tag/v0.7.3)。只需要下载：
+[`v0.7.4`](https://github.com/yoyicue/xpad2-cli/releases/tag/v0.7.4)。只需要下载：
 
 ```text
-xpad2-v0.7.3-android-arm64
+xpad2-v0.7.4-android-arm64
 ```
 
-v0.7.3 已把 PD2 `/272` 精确元组与 `/19`–`/272` 兼容范围固定到独立发布的
-PoC v1.4.0 制品；PD2P 继续使用隔离的 PoC v1.3.0 制品。
+v0.7.4 保留 v0.7.3 的 PD2 `/272`、PD2P `/19`–`/272` 支持，并修复临时 Root
+daemon 的收口验证；PD2 和 PD2P 仍分别使用隔离的 PoC v1.4.0、v1.3.0 制品。
 
 macOS 或 Linux 可以直接执行：
 
 ```sh
-curl -fLO https://github.com/yoyicue/xpad2-cli/releases/download/v0.7.3/xpad2-v0.7.3-android-arm64
-shasum -a 256 xpad2-v0.7.3-android-arm64
+curl -fLO https://github.com/yoyicue/xpad2-cli/releases/download/v0.7.4/xpad2-v0.7.4-android-arm64
+shasum -a 256 xpad2-v0.7.4-android-arm64
 ```
 
 Windows PowerShell 可以执行：
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/yoyicue/xpad2-cli/releases/download/v0.7.3/xpad2-v0.7.3-android-arm64" -OutFile "xpad2-v0.7.3-android-arm64"
-Get-FileHash .\xpad2-v0.7.3-android-arm64 -Algorithm SHA256
+Invoke-WebRequest -Uri "https://github.com/yoyicue/xpad2-cli/releases/download/v0.7.4/xpad2-v0.7.4-android-arm64" -OutFile "xpad2-v0.7.4-android-arm64"
+Get-FileHash .\xpad2-v0.7.4-android-arm64 -Algorithm SHA256
 ```
 
 正确的 SHA-256 是：
 
 ```text
-49ede633a979130d4c792b130eee99bb9345578af3214c63a67b2dc6a611a24a
+f3a8d50a42075fd2e8105fec6238247494cdd252be303b7bf49ea47877ab354c
 ```
 
 哈希不一致时不要继续，重新下载文件。
@@ -119,7 +119,7 @@ Get-FileHash .\xpad2-v0.7.3-android-arm64 -Algorithm SHA256
 本节仅适用于首次安装或损坏恢复。在下载文件所在目录执行：
 
 ```sh
-adb push xpad2-v0.7.3-android-arm64 /data/local/tmp/xpad2
+adb push xpad2-v0.7.4-android-arm64 /data/local/tmp/xpad2
 adb shell chmod 700 /data/local/tmp/xpad2
 adb shell /data/local/tmp/xpad2 version
 ```
@@ -127,7 +127,7 @@ adb shell /data/local/tmp/xpad2 version
 最后一条命令应显示：
 
 ```text
-xpad2 0.7.3 (catalog 2026-07-29.1)
+xpad2 0.7.4 (catalog 2026-07-29.2)
 ```
 
 这就表示 `xpad2` 已经安装到了：
@@ -186,7 +186,7 @@ adb shell /data/local/tmp/xpad2 install
 5. 安装 `xpad-installer`；
 6. 建立并验证与本机 OEM installer UID 一致的 `installer-backup` 备用安装路径；
 7. 安装并激活 BoomInstaller；
-8. 恢复 SELinux Enforcing，并清理临时 Root 文件和进程。
+8. 恢复 SELinux Enforcing，并确认临时 Root 文件、进程和抽象监听 socket 均已清理。
 
 临时 Root 通常需要几分钟，最多尝试 6 轮，并有 20 分钟安全截止。终端仍在持续输出时
 请耐心等待，不要重复执行命令。

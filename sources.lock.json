@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "product_version": "0.7.3",
+  "product_version": "0.7.4",
   "sources": [
     {
       "component": "ionstack",
