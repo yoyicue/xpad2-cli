@@ -12,8 +12,8 @@
     {
       "component": "ionstack-pd2",
       "repository": "https://github.com/yoyicue/xpad2-ionstack-poc",
-      "commit": "d29bf08e8ad1aa56b4f37cf91fa05649aa3f8833",
-      "tag": "v1.6.0",
+      "commit": "663b0698510c9db23bfad931ef23efb088fb9f6c",
+      "tag": "v1.6.1",
       "license": "GPL-3.0-or-later AND Apache-2.0"
     },
     {

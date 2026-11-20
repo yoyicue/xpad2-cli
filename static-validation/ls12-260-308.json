@@ -32,7 +32,9 @@
       "boot_sha256": "a69563545f164fbe6ac6c7c021959cfc42aa7ab0b04e3f929c43c8ef921b6c04",
       "kernel_sha256": "6d641aef64ad5fe9088e5aadd3c3b3e1c41c2755bc532a07836f34e138e957b2",
       "config_sha256": "851849fa49dc2330c6484bdabc7221dcb3c349832eb9c57bcd49aaf1ef53eb7e",
-      "kallsyms_addresses_sha256": "c2f7032ffd3bb3191499eab274763141510de40b94312fb51b3b143891ad7d33"
+      "kallsyms_addresses_sha256": "c2f7032ffd3bb3191499eab274763141510de40b94312fb51b3b143891ad7d33",
+      "runner_runner_sha256": "2563ba13e4c966ab181c68e66a97462a8f16be33ccaf0c349738bc6bbb624b90",
+      "runner_source": "poc v1.6.1 (c242ba04e7) — profile.h tuple extension of the v1.5.0 payload"
     }
   ],
   "kernel_modules": {
