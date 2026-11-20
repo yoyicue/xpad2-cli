@@ -38,10 +38,10 @@ fn candidate_paths(manifest: &Path, artifact_dir: Option<&Path>, a: &Artifact) -
         .map(PathBuf::from)
         .unwrap_or_else(|| parent.join("xpad2-ionstack-release"));
     let mapped = match a.id.as_str() {
-        "ionstack-runner-xpad2-v260-v272" => {
+        "ionstack-runner-xpad2-v260-v308" => {
             Some(ionstack_pd2_source.join("build/xpad2/ionstack_reroot_device"))
         }
-        "ionstack-preload-xpad2-v260-v272" => {
+        "ionstack-preload-xpad2-v260-v308" => {
             Some(ionstack_pd2_source.join("build/xpad2/ionstack_preload.so"))
         }
         "ionstack-perf-target-xpad2" => {

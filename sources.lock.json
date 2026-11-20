@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "product_version": "0.7.4",
+  "product_version": "0.7.6",
   "sources": [
     {
       "component": "ionstack",
@@ -12,8 +12,8 @@
     {
       "component": "ionstack-pd2",
       "repository": "https://github.com/yoyicue/xpad2-ionstack-poc",
-      "commit": "2e069e060a813a3856ac34a44527a5e4feeaaa03",
-      "tag": "v1.4.0",
+      "commit": "d29bf08e8ad1aa56b4f37cf91fa05649aa3f8833",
+      "tag": "v1.6.0",
       "license": "GPL-3.0-or-later AND Apache-2.0"
     },
     {

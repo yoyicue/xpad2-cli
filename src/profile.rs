@@ -552,9 +552,9 @@ mod tests {
         let mut xpad2 = ranged_profile();
         xpad2.id = "xpad2".to_string();
         xpad2.product_device = "ls12_mt8797_wifi_64".to_string();
-        xpad2.build_fingerprint = format!("{PREFIX}272{SUFFIX}");
-        xpad2.fingerprint_incremental_max = 272;
-        xpad2.kernel_version = "#1 SMP PREEMPT Thu Jul 23 20:40:43 CST 2026".to_string();
+        xpad2.build_fingerprint = format!("{PREFIX}308{SUFFIX}");
+        xpad2.fingerprint_incremental_max = 308;
+        xpad2.kernel_version = "#1 SMP PREEMPT Mon Oct 26 15:08:53 CST 2026".to_string();
 
         let xpad2p = DeviceProfile {
             id: "xpad2p".to_string(),
@@ -571,10 +571,11 @@ mod tests {
             hooks_supported: true,
         };
         let xpad2_profile = IonStackProfile {
-            id: "xpad2-v260-v272".to_string(),
+            id: "xpad2-v260-v308".to_string(),
             device_profile_id: "xpad2".to_string(),
-            kernel_version: "#1 SMP PREEMPT Thu Jul 23 20:40:43 CST 2026".to_string(),
+            kernel_version: "#1 SMP PREEMPT Mon Oct 26 15:08:53 CST 2026".to_string(),
             kernel_version_alternates: vec![
+                "#1 SMP PREEMPT Thu Jul 23 20:40:43 CST 2026".to_string(),
                 "#1 SMP PREEMPT Mon Jun 29 04:08:29 CST 2026".to_string(),
             ],
             exact_tuples: vec![
@@ -585,6 +586,10 @@ mod tests {
                 crate::model::IonStackExactTuple {
                     fingerprint_incremental: 272,
                     kernel_version: "#1 SMP PREEMPT Thu Jul 23 20:40:43 CST 2026".to_string(),
+                },
+                crate::model::IonStackExactTuple {
+                    fingerprint_incremental: 308,
+                    kernel_version: "#1 SMP PREEMPT Mon Oct 26 15:08:53 CST 2026".to_string(),
                 },
             ],
             runner_artifact: "runner-xpad2".to_string(),
@@ -624,7 +629,7 @@ mod tests {
             ionstack_discovery_profiles: Vec::new(),
             ionstack_profiles_v2: vec![xpad2_profile, xpad2p_profile],
             ionstack_discovery_profiles_v2: vec![
-                discovery_profile("xpad2-v260-v272", "0x00be4c48"),
+                discovery_profile("xpad2-v260-v308", "0x00be4c48"),
                 discovery_profile("xpad2p-v262-v272", "0x00be0b18"),
             ],
             artifacts: Vec::new(),
@@ -882,7 +887,7 @@ mod tests {
                 Some(272),
             )
             .unwrap();
-        assert_eq!(ls12_272.profile_id, "xpad2-v260-v272");
+        assert_eq!(ls12_272.profile_id, "xpad2-v260-v308");
         assert_eq!(ls12_272.runner, "runner-xpad2");
         assert!(
             lock.selected_technical_profile(
@@ -927,16 +932,17 @@ mod tests {
     }
 
     #[test]
-    fn xpad2_260_and_272_share_one_isolated_artifact_profile() {
+    fn xpad2_260_through_308_share_one_isolated_artifact_profile() {
         let lock = unified_lock();
         for (incremental, kernel_version) in [
             (260, "#1 SMP PREEMPT Mon Jun 29 04:08:29 CST 2026"),
             (272, "#1 SMP PREEMPT Thu Jul 23 20:40:43 CST 2026"),
+            (308, "#1 SMP PREEMPT Mon Oct 26 15:08:53 CST 2026"),
         ] {
             let artifacts = lock
                 .ionstack_artifacts("xpad2", kernel_version, Some(incremental))
                 .unwrap();
-            assert_eq!(artifacts.profile_id, "xpad2-v260-v272");
+            assert_eq!(artifacts.profile_id, "xpad2-v260-v308");
             assert_eq!(artifacts.runner, "runner-xpad2");
         }
         assert!(
@@ -947,13 +953,21 @@ mod tests {
             )
             .is_none()
         );
+        assert!(
+            lock.ionstack_artifacts(
+                "xpad2",
+                "#1 SMP PREEMPT Mon Oct 26 15:08:53 CST 2026",
+                Some(272),
+            )
+            .is_none()
+        );
         assert_eq!(lock.ionstack_discovery_target("xpad2"), Some("perf-xpad2"));
     }
 
     #[test]
-    fn xpad2_root_range_is_19_through_272_only() {
+    fn xpad2_root_range_is_19_through_308_only() {
         let lock = unified_lock();
-        for incremental in [19, 260, 272] {
+        for incremental in [19, 260, 272, 308] {
             let fingerprint = format!("{PREFIX}{incremental}{SUFFIX}");
             assert!(
                 lock.selected_technical_profile(
@@ -965,7 +979,7 @@ mod tests {
                 .is_some()
             );
         }
-        for incremental in [18, 273] {
+        for incremental in [18, 309] {
             let fingerprint = format!("{PREFIX}{incremental}{SUFFIX}");
             assert!(
                 lock.selected_technical_profile(
@@ -1086,8 +1100,8 @@ mod tests {
         )))
         .unwrap();
         assert_eq!(legacy.schema, 1);
-        assert_eq!(legacy.product_version, "0.7.4");
-        assert_eq!(legacy.catalog_version, "2026-07-29.2");
+        assert_eq!(legacy.product_version, "0.7.6");
+        assert_eq!(legacy.catalog_version, "2026-11-20.1");
         assert!(legacy.profile.build_fingerprint.contains("/260:"));
         assert_eq!(legacy.profile.kernel_release_prefix, "4.19.191");
         assert_eq!(legacy.profile.abi, "arm64-v8a");

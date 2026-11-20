@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "product_version": "0.7.4",
-  "catalog_version": "2026-07-29.2",
+  "product_version": "0.7.6",
+  "catalog_version": "2026-11-20.1",
   "profile": {
     "build_fingerprint": "alps/vnd_ls12_mt8797_wifi_64/ls12_mt8797_wifi_64:13/TP1A.220624.014/260:user/release-keys",
     "build_fingerprint_prefix": "alps/vnd_ls12_mt8797_wifi_64/ls12_mt8797_wifi_64:13/TP1A.220624.014/",
@@ -16,13 +16,13 @@
     {
       "id": "xpad2",
       "product_device": "ls12_mt8797_wifi_64",
-      "build_fingerprint": "alps/vnd_ls12_mt8797_wifi_64/ls12_mt8797_wifi_64:13/TP1A.220624.014/272:user/release-keys",
+      "build_fingerprint": "alps/vnd_ls12_mt8797_wifi_64/ls12_mt8797_wifi_64:13/TP1A.220624.014/308:user/release-keys",
       "build_fingerprint_prefix": "alps/vnd_ls12_mt8797_wifi_64/ls12_mt8797_wifi_64:13/TP1A.220624.014/",
       "build_fingerprint_suffix": ":user/release-keys",
       "fingerprint_incremental_min": 19,
-      "fingerprint_incremental_max": 272,
+      "fingerprint_incremental_max": 308,
       "kernel_release_prefix": "4.19.191",
-      "kernel_version": "#1 SMP PREEMPT Thu Jul 23 20:40:43 CST 2026",
+      "kernel_version": "#1 SMP PREEMPT Mon Oct 26 15:08:53 CST 2026",
       "abi": "arm64-v8a",
       "late_load_supported": true,
       "hooks_supported": true
@@ -88,10 +88,11 @@
       "chainwalk_probe_artifact": "ionstack-chainwalk-probe"
     },
     {
-      "id": "xpad2-v260-v272",
+      "id": "xpad2-v260-v308",
       "device_profile_id": "xpad2",
-      "kernel_version": "#1 SMP PREEMPT Thu Jul 23 20:40:43 CST 2026",
+      "kernel_version": "#1 SMP PREEMPT Mon Oct 26 15:08:53 CST 2026",
       "kernel_version_alternates": [
+        "#1 SMP PREEMPT Thu Jul 23 20:40:43 CST 2026",
         "#1 SMP PREEMPT Mon Jun 29 04:08:29 CST 2026"
       ],
       "exact_tuples": [
@@ -102,11 +103,15 @@
         {
           "fingerprint_incremental": 272,
           "kernel_version": "#1 SMP PREEMPT Thu Jul 23 20:40:43 CST 2026"
+        },
+        {
+          "fingerprint_incremental": 308,
+          "kernel_version": "#1 SMP PREEMPT Mon Oct 26 15:08:53 CST 2026"
         }
       ],
-      "runner_artifact": "ionstack-runner-xpad2-v260-v272",
+      "runner_artifact": "ionstack-runner-xpad2-v260-v308",
       "perf_target_artifact": "ionstack-perf-target-xpad2",
-      "preload_artifact": "ionstack-preload-xpad2-v260-v272",
+      "preload_artifact": "ionstack-preload-xpad2-v260-v308",
       "chainwalk_probe_artifact": "ionstack-chainwalk-probe-xpad2"
     },
     {
@@ -221,7 +226,7 @@
       }
     },
     {
-      "profile_id": "xpad2-v260-v272",
+      "profile_id": "xpad2-v260-v308",
       "offsets": {
         "ashmem_llseek": "0x00be4c48",
         "ashmem_read_iter": "0x00be4ce4",
@@ -263,12 +268,12 @@
   ],
   "artifacts": [
     {
-      "id": "ionstack-runner-xpad2-v260-v272",
-      "filename": "ionstack_reroot_device-xpad2-v260-v272",
+      "id": "ionstack-runner-xpad2-v260-v308",
+      "filename": "ionstack_reroot_device-xpad2-v260-v308",
       "kind": "internal",
-      "version": "2e069e060a813a3856ac34a44527a5e4feeaaa03",
-      "size": 36888,
-      "sha256": "054535fcff87ee9187ba94200f0938088dcc544e7bccac65a161ab4743462f5e",
+      "version": "d29bf08e8ad1aa56b4f37cf91fa05649aa3f8833",
+      "size": 38520,
+      "sha256": "4c9624f58bcecd9f6c9ab1e0ce6d24391929ba7ad203f3be46ce77abf9c921e2",
       "embedded": true,
       "mode": 448,
       "target": null,
@@ -277,10 +282,10 @@
       "cert_sha256": null
     },
     {
-      "id": "ionstack-preload-xpad2-v260-v272",
-      "filename": "ionstack_preload-xpad2-v260-v272.so",
+      "id": "ionstack-preload-xpad2-v260-v308",
+      "filename": "ionstack_preload-xpad2-v260-v308.so",
       "kind": "internal",
-      "version": "2e069e060a813a3856ac34a44527a5e4feeaaa03",
+      "version": "d29bf08e8ad1aa56b4f37cf91fa05649aa3f8833",
       "size": 209872,
       "sha256": "a615a812973532867d303effb576c0a775cf0f911762ba787ee73e4cf1e09500",
       "embedded": true,
@@ -294,7 +299,7 @@
       "id": "ionstack-perf-target-xpad2",
       "filename": "ionstack_perf_target-xpad2",
       "kind": "internal",
-      "version": "2e069e060a813a3856ac34a44527a5e4feeaaa03",
+      "version": "d29bf08e8ad1aa56b4f37cf91fa05649aa3f8833",
       "size": 20464,
       "sha256": "3a3ec307457eaeee6e2e20ba3aa0d7d0eb7d36d13998a1667b9640cbc69135a0",
       "embedded": true,
@@ -308,7 +313,7 @@
       "id": "ionstack-chainwalk-probe-xpad2",
       "filename": "cve43499_chainwalk_probe_arm32-xpad2",
       "kind": "internal",
-      "version": "2e069e060a813a3856ac34a44527a5e4feeaaa03",
+      "version": "d29bf08e8ad1aa56b4f37cf91fa05649aa3f8833",
       "size": 152504,
       "sha256": "911bc34b1d4fba042f36ddda64eaf79f6a9e85c555c32fa1b0f2f79c5ea8aedd",
       "embedded": true,

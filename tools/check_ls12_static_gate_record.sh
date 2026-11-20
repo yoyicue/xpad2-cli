@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 CATALOG="$ROOT/assets.lock.json"
-REPORT="$ROOT/static-validation/ls12-260-272.json"
+REPORT="$ROOT/static-validation/ls12-260-308.json"
 
 command -v jq >/dev/null || {
   printf 'jq is required to verify the LS12 static-gate record\n' >&2
@@ -18,15 +18,17 @@ jq -e --slurpfile catalog "$CATALOG" '
   .schema == 1 and
   .kind == "xpad2-ls12-static-validation" and
   .status == "pass" and
-  (.profiles | length) == 2 and
+  (.profiles | length) == 3 and
   (.kernel_modules | keys | sort) == ["ksu", "suu"] and
   (.hook_artifacts | keys | sort) == ["neozygisk", "vector"] and
-  ([.profiles[] | .fingerprint_incremental] | sort) == [260, 272] and
+  ([.profiles[] | .fingerprint_incremental] | sort) == [260, 272, 308] and
   ([.profiles[] | {fingerprint_incremental, kernel_version}] |
     sort_by(.fingerprint_incremental)) ==
     ([$catalog[0].ionstack_profiles_v2[] |
-        select(.id == "xpad2-v260-v272") | .exact_tuples[]] |
+        select(.id == "xpad2-v260-v308") | .exact_tuples[]] |
       sort_by(.fingerprint_incremental)) and
+  ([.profiles[] | select(.fingerprint_incremental == 308) | .config_sha256] ==
+    [.profiles[] | select(.fingerprint_incremental == 260) | .config_sha256]) and
   ([.kernel_modules[] |
     . as $module |
     $module.missing_imports == 0 and
@@ -46,6 +48,13 @@ jq -e --slurpfile catalog "$CATALOG" '
   .checks.ls12_260_272_config_identical and
   .checks.ls12_260_272_absolute_kallsyms_identical and
   .checks.ls12_260_272_uncompressed_image_byte_differences == 48 and
+  .checks.ls12_308_config_sha256_matches_260_272 and
+  .checks.ls12_308_offset_anchors_match_catalog and
+  (.checks.ls12_308_offset_anchor_symbols | length) >= 7 and
+  .checks.ls12_260523_to_308_uncompressed_image_byte_differences == 50 and
+  .checks.ls12_308_differences_confined_to_banner_build_id_timestamps and
+  .checks.ls12_308_post_sdk_level == 33 and
+  .checks.ls12_308_post_security_patch_level == "2023-06-05" and
   .checks.module_layout_crc_unique_in_both_kernels and
   .checks.module_imported_symbol_addresses_identical and
   .checks.android_release == "13" and
@@ -59,11 +68,11 @@ jq -e --slurpfile catalog "$CATALOG" '
   ($catalog[0].device_profiles[] |
     select(.id == "xpad2") |
     .fingerprint_incremental_min == 19 and
-    .fingerprint_incremental_max == 272 and
+    .fingerprint_incremental_max == 308 and
     .late_load_supported and .hooks_supported)
 ' "$REPORT" >/dev/null || {
   printf 'LS12 static-gate record does not authorize the locked catalog\n' >&2
   exit 1
 }
 
-printf 'XPAD2_LS12_STATIC_GATE_RECORD_OK profiles=260,272\n'
+printf 'XPAD2_LS12_STATIC_GATE_RECORD_OK profiles=260,272,308\n'

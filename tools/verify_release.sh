@@ -111,15 +111,15 @@ jq -e \
   --arg commit "$ionstack_pd2_commit" \
   --argjson upstream "$upstream_pd2_release_lock" '
   ([.artifacts[] |
-      select(.id == "ionstack-runner-xpad2-v260-v272" or
-        .id == "ionstack-preload-xpad2-v260-v272" or
+      select(.id == "ionstack-runner-xpad2-v260-v308" or
+        .id == "ionstack-preload-xpad2-v260-v308" or
         .id == "ionstack-perf-target-xpad2" or
         .id == "ionstack-chainwalk-probe-xpad2") |
       {size,sha256}] | sort_by(.sha256)) ==
     ([$upstream.artifacts[] | {size,sha256}] | sort_by(.sha256)) and
   all(.artifacts[] |
-      select(.id == "ionstack-runner-xpad2-v260-v272" or
-        .id == "ionstack-preload-xpad2-v260-v272" or
+      select(.id == "ionstack-runner-xpad2-v260-v308" or
+        .id == "ionstack-preload-xpad2-v260-v308" or
         .id == "ionstack-perf-target-xpad2" or
         .id == "ionstack-chainwalk-probe-xpad2");
       .version == $commit)
@@ -311,6 +311,7 @@ for required in \
   licenses/xpad2-ionstack-poc-LICENSE \
   licenses/xpad2-ionstack-poc-Apache-2.0-LICENSE \
   static-validation/ls12-260-272.json \
+  static-validation/ls12-260-308.json \
   static-validation/ls14-262-272.json; do
   [[ -s "$package/$required" ]] || {
     printf 'release license material missing: %s\n' "$required" >&2

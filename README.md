@@ -3,7 +3,7 @@
 `xpad2` 是运行在 XPad2/PD2P Android 设备上的单文件、可离线工作、可按需获得临时 Root，
 并能通过签名 Release 自更新的安装器。
 控制面按 `ro.product.device`、完整 fingerprint、内核和 ABI 选择签名设备 profile：
-LS12/PD2 与 LS14/PD2P 的 Root 范围均为 `/19`–`/272`。精确 `uname -v`
+LS12/PD2 Root 范围 `/19`–`/308`，LS14/PD2P 为 `/19`–`/272`。精确 `uname -v`
 直接选择对应的隔离 payload；范围内未知 build 进入同一设备族内部的只读 discovery，
 以至少两个独立 offset anchor 唯一选型，再依次通过 preflight、validate 和 Root 状态。
 PD2 与 PD2P payload 从不跨设备族候选或混用 offsets。
@@ -46,18 +46,18 @@ adb -s SERIAL shell /data/local/tmp/xpad2 update
 
 - 产品族门：固定 XPad2 fingerprint 前缀、`:user/release-keys` 后缀、canonical 数字
   incremental 和 arm64 ABI；用于自更新、OTA 冻结/解冻、CLI/APK 安装及 0044 修复；
-- Root 门：在产品族门之上，LS12 与 LS14 都要求 `/19`–`/272`，
+- Root 门：在产品族门之上，LS12 要求 `/19`–`/308`、LS14 要求 `/19`–`/272`，
   两者都要求 `4.19.191` 内核；只用于
   `root`、`ksu`、`suu`、`full`、`suu-full` 和真正启动 IonStack 的路径；
 - 范围内未知 `uname -v` 会进入对应设备族的只读 discovery 状态机；只有
   discovery/preflight/validate 证据不足时才安全停止。
 
-PD2 的 `/260`、`/272` 与 PD2P 的 `/262`、`/272` 都已通过发布静态门禁：
+PD2 的 `/260`、`/272`、`/308` 与 PD2P 的 `/262`、`/272` 都已通过发布静态门禁：
 4.19.191 `vermagic`、`module_layout` CRC、全部模块导入符号、ABI 关键 config，以及
 Zygote/ART/Binder/Bionic 核心文件均已核对。通过设备 profile 与 IonStack 预检后，
 `ksu`、`suu`、`full`、`suu-full` 会自动继续；Hook 仍保持显式 opt-in，并在 Enforcing
 下严格验活。证据记录见
-[`static-validation/ls12-260-272.json`](static-validation/ls12-260-272.json) 和
+[`static-validation/ls12-260-308.json`](static-validation/ls12-260-308.json)（含 `/260`–`/272` 记录）、
 [`static-validation/ls14-262-272.json`](static-validation/ls14-262-272.json)。
 
 同一 XPad2 产品族但不满足 Root 门时，仍可显式安装完整的无 Root 控制面：
@@ -358,7 +358,7 @@ RSA-4096 production identity；两种 JSON 都有严格的 kind/schema/字段边
 IonStack Root 只接受以下指纹：
 
 ```text
-PD2:  alps/vnd_ls12_mt8797_wifi_64/ls12_mt8797_wifi_64:13/TP1A.220624.014/<19..272>:user/release-keys
+PD2:  alps/vnd_ls12_mt8797_wifi_64/ls12_mt8797_wifi_64:13/TP1A.220624.014/<19..308>:user/release-keys
 PD2P: alps/vnd_ls14_mt8797_wifi_64/ls14_mt8797_wifi_64:13/TP1A.220624.014/<19..272>:user/release-keys
 ```
 
@@ -367,8 +367,8 @@ PD2P: alps/vnd_ls14_mt8797_wifi_64/ls14_mt8797_wifi_64:13/TP1A.220624.014/<19..2
 launcher 同时要求 `ro.product.device` 与 fingerprint 内的 LS12/LS14 身份一致，不能仅靠
 构建号把一个设备族伪装成另一个。
 `build_fingerprint` 中精确 `/260` 值继续作为 v0.4.14 及更旧 updater 的兼容锚点；
-这不限制新 launcher 的 LS12 `/19`–`/272` 运行范围。v0.7.3 保留 v1.2.0 的两个历史
-`/19` profile，并把新的 LS12 `/260`、`/272` 共用 profile 固定到 POC v1.4.0
+这不限制新 launcher 的 LS12 `/19`–`/308` 运行范围。v0.7.3 保留 v1.2.0 的两个历史
+`/19` profile，并把新的 LS12 `/260`–`/308` 共用 profile 固定到 POC v1.4.0
 （commit `2e069e0`）。PD2P catalog 继续独立固定 v1.3.0（commit `51ee9d2`）
 的 LS14 profile：
 
@@ -376,7 +376,7 @@ launcher 同时要求 `ro.product.device` 与 fingerprint 内的 LS12/LS14 身�
 | --- | --- |
 | `xpad2-v19-a` | `#1 SMP PREEMPT Tue Aug 13 02:06:24 CST 2024` |
 | `xpad2-v19-b` | `#1 SMP PREEMPT Mon Dec 16 23:29:13 CST 2024` |
-| `xpad2-v260-v272` | `#1 SMP PREEMPT Mon Jun 29 04:08:29 CST 2026`（/260）或 `#1 SMP PREEMPT Thu Jul 23 20:40:43 CST 2026`（/272） |
+| `xpad2-v260-v308` | `#1 SMP PREEMPT Mon Jun 29 04:08:29 CST 2026`（/260）、`#1 SMP PREEMPT Thu Jul 23 20:40:43 CST 2026`（/272）或 `#1 SMP PREEMPT Mon Oct 26 15:08:53 CST 2026`（/308） |
 | `xpad2p-v262-v272` | `#1 SMP PREEMPT Mon Jun 29 05:28:07 CST 2026`（/262）或 `#1 SMP PREEMPT Thu Jul 23 20:38:25 CST 2026`（/272） |
 
 不同设备族或 build 的 runner/preload 不能盲目互换。表内 build 走精确快速路径；表外但
@@ -392,7 +392,7 @@ static-gate checker，确保启用的 KSU/SUU/Hook 能力、精确元组及锁�
 
 V231227 的 timestamp-style `/1703659196` 是 canonical 数字且属于同一签名 XPad2
 产品族，因此可以更新、冻结 OTA、安装 `xpad-installer`/`installer-backup`、Manager APK、
-BoomInstaller、任意本地 CLI/APK；它不属于 `/19`–`/272` Root 范围，所以 `root`、
+BoomInstaller、任意本地 CLI/APK；它不属于 Root 范围，所以 `root`、
 `ksu`、`suu`、`full` 和 `suu-full` 会在任何 IonStack 写入前安全拒绝。
 
 临时 Root 链可能导致设备重启或 kernel panic。仅应在你拥有或明确获授权、且有恢复路径

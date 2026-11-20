@@ -66,8 +66,8 @@ source_for() {
     done
   fi
   case "$id" in
-    ionstack-runner-xpad2-v260-v272) printf '%s\n' "$IONSTACK_PD2_SOURCE/build/xpad2/ionstack_reroot_device" ;;
-    ionstack-preload-xpad2-v260-v272) printf '%s\n' "$IONSTACK_PD2_SOURCE/build/xpad2/ionstack_preload.so" ;;
+    ionstack-runner-xpad2-v260-v308) printf '%s\n' "$IONSTACK_PD2_SOURCE/build/xpad2/ionstack_reroot_device" ;;
+    ionstack-preload-xpad2-v260-v308) printf '%s\n' "$IONSTACK_PD2_SOURCE/build/xpad2/ionstack_preload.so" ;;
     ionstack-perf-target-xpad2) printf '%s\n' "$IONSTACK_PD2_SOURCE/build/xpad2/ionstack_perf_target" ;;
     ionstack-chainwalk-probe-xpad2) printf '%s\n' "$IONSTACK_PD2_SOURCE/build/xpad2/cve_2026_43499_chainwalk_probe_arm32" ;;
     ionstack-runner-xpad2p-v262-v272) printf '%s\n' "$IONSTACK_PD2P_SOURCE/build/xpad2p/ionstack_reroot_device" ;;
@@ -125,6 +125,7 @@ cp "$ROOT/README.md" "$ROOT/BEGINNER_GUIDE.md" "$ROOT/DESIGN.md" \
 mkdir -p "$PACKAGE/static-validation"
 cp "$ROOT/static-validation/ls14-262-272.json" "$PACKAGE/static-validation/"
 cp "$ROOT/static-validation/ls12-260-272.json" "$PACKAGE/static-validation/"
+cp "$ROOT/static-validation/ls12-260-308.json" "$PACKAGE/static-validation/"
 
 cp "$IONSTACK_PD2P_SOURCE/LICENSE" "$PACKAGE/licenses/xpad2-ionstack-poc-LICENSE"
 cp "$IONSTACK_PD2P_SOURCE/NOTICE" "$PACKAGE/licenses/xpad2-ionstack-poc-NOTICE"
