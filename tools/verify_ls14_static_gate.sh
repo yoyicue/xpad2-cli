@@ -262,9 +262,9 @@ done
 pass "Android 13 zygote, ART, Binder, Bionic and linker compatibility set is byte-identical"
 
 expect_sha256 "$NEOZYGISK_ZIP" \
-  5c84df9f962c04855b3523a3a75022cf5e4f3ad3dfd94794ed92b43e911f3b9a
+  93a1425c67bb89f58a0dcb9fc823ec93f6472214f221e667a70b67c6a6e061a1
 expect_sha256 "$VECTOR_ZIP" \
-  d5e39669c02c2c699ab948eb8f3639b348eefb7749553224a9c62fa4a2f2dc18
+  9ee8323575d615f7b3f1076ff60b2a63a49390ef11881b52632311a37f6f79cc
 unzip -tq "$NEOZYGISK_ZIP" >/dev/null
 unzip -tq "$VECTOR_ZIP" >/dev/null
 mkdir -p "$AUDIT_DIR/neo" "$AUDIT_DIR/vector"
@@ -274,7 +274,9 @@ unzip -q "$VECTOR_ZIP" -d "$AUDIT_DIR/vector"
 for hook_elf in \
   "$AUDIT_DIR/neo/bin/arm64-v8a/zygiskd" \
   "$AUDIT_DIR/neo/lib/arm64-v8a/libzygisk.so" \
+  "$AUDIT_DIR/neo/lib/arm64-v8a/libzygisk_ptrace.so" \
   "$AUDIT_DIR/vector/lib/arm64-v8a/libzygisk.so" \
+  "$AUDIT_DIR/vector/bin/arm64-v8a/dex2oat" \
   "$AUDIT_DIR/vector/bin/arm64-v8a/liboat_hook.so"; do
   file "$hook_elf" | grep -q 'ARM aarch64' ||
     fail "hook artifact is not AArch64: $hook_elf"
@@ -284,6 +286,10 @@ context_hits=$(LC_ALL=C grep -aob 'u:object_r:zygisk_file:s0' \
   "$AUDIT_DIR/neo/bin/arm64-v8a/zygiskd" | wc -l | tr -d ' ')
 [[ "$context_hits" == "1" ]] ||
   fail "NeoZygisk context replacement anchor count is $context_hits"
+ptrace_workdir_hits=$(LC_ALL=C grep -aob '/data/adb/neozygisk' \
+  "$AUDIT_DIR/neo/lib/arm64-v8a/libzygisk_ptrace.so" | wc -l | tr -d ' ')
+[[ "$ptrace_workdir_hits" == "1" ]] ||
+  fail "NeoZygisk ptrace workdir replacement anchor count is $ptrace_workdir_hits"
 grep -q -- '--system-server-max-retry=3' "$AUDIT_DIR/vector/service.sh" ||
   fail "Vector retry-policy patch anchor is missing"
 grep -q '/data/adb/neozygisk' "$AUDIT_DIR/neo/post-fs-data.sh" ||

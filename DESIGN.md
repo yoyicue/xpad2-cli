@@ -109,6 +109,12 @@ v0.7.6 将 LS12/PD2 Root 范围扩为 canonical `/19`–`/308`。V261026（incre
 offset anchors 与既有 discovery catalog 完全相同，因此直接复用 POC v1.4.0 的已验证
 runner/preload/probe 制品，不重建 payload。证据见
 `static-validation/ls12-260-308.json`。
+v0.7.7 升级锁定 Hook 供应链至 NeoZygisk v2.4 (289) 与 Vector v2.2 (3080)：为 NeoZygisk
+v2.4 新增 `zygisk-ptrace64` 等长 workdir 补丁（`/data/adb/neozygisk\0` -> `/dev/neozygisk\0...`）；
+适配 Vector v2.2 的 `vectord` daemon 进程名；在保持上游 `sepolicy.rule` 禁用且拒绝 `allow *`
+与 `unlabeled` 宽泛规则的前提下，通过锁定 MagiskPolicy v30.7 加载经审计的最小 `dex2oat`、
+`xposed_file` 与 `xposed_data` live 策略，并在 `hooks disable` 中对称撤销；状态验活新增
+`dex2oat64` bind-mount 与 `dex2oat_exec` 上下文校验。
 
 ## 1. 产品定义
 
@@ -884,17 +890,19 @@ licenses/
 48. xpad-install 与 BoomInstaller 的 APK/DEX 暂存文件逐事务唯一；旧固定名只读残留、
     并发事务或上次中断不会阻断新事务，staging I/O 失败明确返回 artifact/path/errno 且
     Windows 工具不会误导用户重启。
-49. `install zygisk`/`install vector` 只使用锁定的 NeoZygisk v2.3、Vector v2.0 和
+49. `install zygisk`/`install vector` 只使用锁定的 NeoZygisk v2.4、Vector v2.2 和
     MagiskPolicy v30.7 ARM64 制品；大小、SHA-256、来源 commit/tag 与许可证均可追溯。
 50. 旧 KSU `SET_SEPOLICY` 返回 `EOPNOTSUPP` 时，不把空成功当作已应用；MagiskPolicy
-    live load 后 policy 哈希变化且精确读回 system_server self execmem，未应用内置 Magisk
-    规则或 Vector 上游宽泛 `allow *`。
+    live load 后精确读回 `system_server self:process execmem` 与经审计的最小受限
+    `dex2oat`/`xposed_file`/`xposed_data` 规则，不应用内置 Magisk 规则、Vector 上游
+    宽泛 `allow *` 或 `unlabeled` 规则，且确保 `untrusted_app` 不具 `dex2oat_exec` 执行权。
 51. NeoZygisk 新 daemon 的每个 `memfd:zygisk-module` 在 system_server fork 前重标为
     `u:object_r:ksu_file:s0:c0`；状态探针同时验证 Zygote maps、单实例 daemon 和 memfd 标签。
 52. Vector system_server 自动重试为 0；策略或 FD 传递失败不会形成 Zygote/system_server
     重启风暴，90 秒严格验活失败返回明确诊断。
-53. Vector Active 必须同时满足 lspd 单实例、Neo 模块注册、配置数据库、live rule、当前
-    system_server 的模块 maps 与带当前 PID 的 Bridge 注入日志，不能以 daemon 存活冒充。
+53. Vector Active 必须同时满足 `vectord` 单实例、Neo 模块注册、配置数据库、live rule、
+    `dex2oat64` 挂载与 `dex2oat_exec` 标签、当前 system_server 的模块 maps 与带当前 PID 的
+    Bridge 注入日志，不能以 daemon 存活冒充。
 54. `/260` 真机在 SELinux Enforcing 下记录 Vector framework 注入 system_server；CLI
     不包含具体应用包名、应用 Hook 载荷、scope 管理或业务日志验收条件。
 55. IonStack 创建的临时 su 在显式 Hook 安装中保留到 Vector 验活；live rule 写入后先

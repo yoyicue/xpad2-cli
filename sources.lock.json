@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "product_version": "0.7.6",
+  "product_version": "0.7.7",
   "sources": [
     {
       "component": "ionstack",
@@ -94,21 +94,21 @@
     {
       "component": "neozygisk-module",
       "repository": "https://github.com/JingMatrix/NeoZygisk",
-      "version": "v2.3 (275)",
-      "commit": "671937c8f0a67623986b19a0d7a1f495e61942ad",
-      "tag": "v2.3",
-      "artifact": "NeoZygisk-v2.3-275-release.zip",
-      "version_code": 275,
+      "version": "v2.4 (289)",
+      "commit": "08080ef775c7fbbd1ad5c4a5d837f81933437abd",
+      "tag": "v2.4",
+      "artifact": "NeoZygisk-v2.4-289-release.zip",
+      "version_code": 289,
       "license": "GPL-3.0-only"
     },
     {
       "component": "vector-module",
       "repository": "https://github.com/JingMatrix/Vector",
-      "version": "v2.0 (3021)",
-      "commit": "76141fed151f49b818144d54f2ebb6ab9a2df11c",
-      "tag": "v2.0",
-      "artifact": "Vector-v2.0-3021-Release.zip",
-      "version_code": 3021,
+      "version": "v2.2 (3080)",
+      "commit": "88f8e1faa8b4e7ce20aefabe9c295cd746ea038e",
+      "tag": "v2.2",
+      "artifact": "Vector-v2.2-3080-Release.zip",
+      "version_code": 3080,
       "license": "GPL-3.0-only"
     },
     {

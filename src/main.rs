@@ -153,8 +153,8 @@ fn command_list(catalog: &Catalog) {
     println!("ota              policy   freeze supported XPad2 system OTA package for user 0");
     println!("ksu              runtime  KernelSU 32547 / UAPI 2 / current boot");
     println!("suu              runtime  SukiSU Ultra 40796 / current boot");
-    println!("zygisk           module   NeoZygisk v2.3 / LS12 Zygote injection");
-    println!("vector           module   Vector v2.0 / generic system bridge runtime");
+    println!("zygisk           module   NeoZygisk v2.4 / LS12 Zygote injection");
+    println!("vector           module   Vector v2.2 / generic system bridge + dex2oat runtime");
     println!("lsposed          alias    compatibility alias for vector");
     println!("installer-backup policy   managed 0044 device-OEM fallback installer");
     for id in [

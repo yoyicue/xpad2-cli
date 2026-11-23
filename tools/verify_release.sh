@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+IONSTACK_SOURCE=${XPAD2_IONSTACK_SOURCE:-$ROOT/../xpad2-ionstack-poc}
 VERSION=$(awk -F '"' '/^version = / {print $2; exit}' "$ROOT/Cargo.toml")
 DIST="$ROOT/dist"
 tmp_dir=$(mktemp -d /tmp/xpad2-release-verify.XXXXXX)
@@ -24,15 +25,15 @@ ionstack_pd2_commit=$(jq -r \
 ionstack_pd2p_commit=$(jq -r \
   '.sources[] | select(.component == "ionstack-pd2p") | .commit' \
   "$ROOT/sources.lock.json")
-upstream_legacy_profiles=$(git -C "$ROOT/../xpad2-ionstack-poc" show \
+upstream_legacy_profiles=$(git -C "$IONSTACK_SOURCE" show \
   "$ionstack_legacy_commit:profiles/xpad2_profiles.json")
-upstream_pd2_profiles=$(git -C "$ROOT/../xpad2-ionstack-poc" show \
+upstream_pd2_profiles=$(git -C "$IONSTACK_SOURCE" show \
   "$ionstack_pd2_commit:profiles/xpad2_profiles.json")
-upstream_pd2_release_lock=$(git -C "$ROOT/../xpad2-ionstack-poc" show \
+upstream_pd2_release_lock=$(git -C "$IONSTACK_SOURCE" show \
   "$ionstack_pd2_commit:xpad2-release.lock.json")
-upstream_pd2p_profiles=$(git -C "$ROOT/../xpad2-ionstack-poc" show \
+upstream_pd2p_profiles=$(git -C "$IONSTACK_SOURCE" show \
   "$ionstack_pd2p_commit:profiles/xpad2p_profiles.json")
-upstream_pd2p_release_lock=$(git -C "$ROOT/../xpad2-ionstack-poc" show \
+upstream_pd2p_release_lock=$(git -C "$IONSTACK_SOURCE" show \
   "$ionstack_pd2p_commit:xpad2p-release.lock.json")
 jq -e \
   --argjson legacy "$upstream_legacy_profiles" \

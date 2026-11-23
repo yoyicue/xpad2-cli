@@ -121,16 +121,17 @@ Vector 是实际锁定和安装的上游制品；旧命令名 `lsposed` 仅作�
 daemon/socket/client。
 
 LS12 的 4.19 late-load KSU 不支持运行时 `SET_SEPOLICY`，但 KSU 域可以加载完整 live
-policy。xpad2 因此把 NeoZygisk 工作目录迁到 `/dev/neozygisk`，并把 daemon socket 与模块
-memfd 重标为 KSU 已存在的 `ksu_file`；同时用锁定的官方 MagiskPolicy v30.7 只增加 Vector
-明确需要的 `system_server self:process execmem`，不导入上游宽泛策略。两套上游
-`sepolicy.rule` 都保留为禁用副本，dex2oat 增强仍不在支持范围。
+policy。xpad2 因此把 NeoZygisk v2.4 工作目录与 `zygisk-ptrace64` 内置路径迁到 `/dev/neozygisk`，
+并把 daemon socket 与模块 memfd 重标为 KSU 已存在的 `ksu_file`；同时用锁定的官方
+MagiskPolicy v30.7 仅加载经审计的 Vector v2.2 最小 live 策略（`system_server self:process execmem`
+以及面向 `dex2oat` 包装器、寄生管理器与模块数据的受限 `dex2oat`/`xposed_file`/`xposed_data` 规则），
+不导入上游宽泛 `allow *` 或 `unlabeled` 策略。两套上游 `sepolicy.rule` 仍保留为禁用副本。
 
 Vector 的自动 system_server 重启次数被固定为 0，避免失败时形成重启风暴。状态验活要求
-模块版本、单实例 daemon、Zygote maps、模块 memfd 标签、live policy、当前 system_server
-maps 和 Bridge 注入日志。xpad2 不携带或修改任何具体应用的 Hook，不管理应用 scope，
-也不把应用进程或业务日志作为 Vector 的成功条件。
-回滚使用 `xpad2 hooks disable`，它会移除最小 live rule 并调度 userspace soft-reboot。
+模块版本、单实例 `vectord` daemon、Zygote maps、模块 memfd 标签、最小 live policy、
+`dex2oat64` 挂载与标签、当前 system_server maps 和 Bridge 注入日志。xpad2 不携带或修改
+任何具体应用的 Hook，不管理应用 scope，也不把应用进程或业务日志作为 Vector 的成功条件。
+回滚使用 `xpad2 hooks disable`，它会撤销最小 live rule 并调度 userspace soft-reboot。
 普通重启会丢失当前 late-load KSU，不是 Hook 激活/停用手段。
 
 再次执行同一命令是幂等的：已经通过包名、版本、证书、哈希和运行时探针验证的项目
@@ -232,7 +233,7 @@ cache ZIP；该 ZIP 只为旧 updater 和独立离线导入保留。目标 ELF �
 ```sh
 xpad2 update --check             # 只检查，不下载大文件、不修改设备
 xpad2 update                     # 更新到最新稳定版
-xpad2 update --version 0.7.4     # 选择精确发布版本
+xpad2 update --version 0.7.7     # 选择精确发布版本
 xpad2 update --reinstall         # 同版本修复性重装
 xpad2 update --offline FILE.zip  # 无网络时使用完整离线更新包
 ```

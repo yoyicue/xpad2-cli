@@ -11,12 +11,14 @@ IONSTACK_SOURCE=${XPAD2_IONSTACK_SOURCE:-$PARENT/xpad2-ionstack-poc}
 IONSTACK_PD2_SOURCE=${XPAD2_IONSTACK_PD2_SOURCE:-$IONSTACK_SOURCE}
 IONSTACK_PD2P_SOURCE=${XPAD2_IONSTACK_PD2P_SOURCE:-$IONSTACK_SOURCE}
 IONSTACK_LEGACY_SOURCE=${XPAD2_IONSTACK_LEGACY_SOURCE:-$PARENT/xpad2-ionstack-release}
+BOOMINSTALLER_SOURCE=${XPAD2_BOOMINSTALLER_SOURCE:-$PARENT/BoomInstaller}
 DIST="$ROOT/dist"
 STAGE="$DIST/.stage-v$VERSION"
 PACKAGE="$STAGE/xpad2-v$VERSION-android-arm64"
 CACHE="$STAGE/xpad2-cache"
 UPDATE_PACKAGE="$STAGE/xpad2-update"
-BINARY="$ROOT/target/aarch64-linux-android/release/xpad2"
+TARGET_DIR=${CARGO_TARGET_DIR:-$ROOT/target}
+BINARY="$TARGET_DIR/aarch64-linux-android/release/xpad2"
 UPDATE_MANIFEST="$DIST/xpad2-update.json"
 UPDATE_SIGNATURE="$DIST/xpad2-update.json.sig"
 CATALOG_SIGNATURE="$DIST/catalog.sig"
@@ -87,9 +89,9 @@ source_for() {
     ksu-manager) printf '%s\n' "$PARENT/xpad2-reroot-android/app/src/main/res/raw/kernelsu_manager_v3_2_5_22_gccfee6dc_32547.apk" ;;
     suu-manager) printf '%s\n' "$PARENT/xpad2-sukisu-lateload/artifacts/SukiSU_v4.1.3_40796-release.apk" ;;
     xpad-installer) printf '%s\n' "$PARENT/xpad-installer/dist/xpad-install" ;;
-    boominstaller) printf '%s\n' "$PARENT/BoomInstaller/out/apk/BoomInstaller-v13.6.0.r24.2f6e7c2-production.apk" ;;
-    neozygisk-module) printf '%s\n' "$ROOT/.xpad2-artifacts/NeoZygisk-v2.3-275-release.zip" ;;
-    vector-module) printf '%s\n' "$ROOT/.xpad2-artifacts/Vector-v2.0-3021-Release.zip" ;;
+    boominstaller) printf '%s\n' "$BOOMINSTALLER_SOURCE/out/apk/BoomInstaller-v13.6.0.r24.2f6e7c2-production.apk" ;;
+    neozygisk-module) printf '%s\n' "$ROOT/.xpad2-artifacts/NeoZygisk-v2.4-289-release.zip" ;;
+    vector-module) printf '%s\n' "$ROOT/.xpad2-artifacts/Vector-v2.2-3080-Release.zip" ;;
     magiskpolicy) printf '%s\n' "$ROOT/.xpad2-artifacts/magiskpolicy-v30.7-arm64" ;;
     *) return 1 ;;
   esac
@@ -136,8 +138,8 @@ cp "$PARENT/xpad2-ksu-lateload/kernel/LICENSE" "$PACKAGE/licenses/KernelSU-kerne
 cp "$PARENT/xpad2-sukisu-lateload/LICENSE" "$PACKAGE/licenses/SukiSU-userspace-GPL-3.0-LICENSE"
 cp "$PARENT/xpad2-sukisu-lateload/kernel/LICENSE" "$PACKAGE/licenses/SukiSU-kernel-GPL-2.0-LICENSE"
 cp "$PARENT/xpad-installer/LICENSE" "$PACKAGE/licenses/xpad-installer-LICENSE"
-cp "$PARENT/BoomInstaller/LICENSE" "$PACKAGE/licenses/BoomInstaller-LICENSE"
-cp "$PARENT/BoomInstaller/NOTICE.md" "$PACKAGE/licenses/BoomInstaller-NOTICE.md"
+cp "$BOOMINSTALLER_SOURCE/LICENSE" "$PACKAGE/licenses/BoomInstaller-LICENSE"
+cp "$BOOMINSTALLER_SOURCE/NOTICE.md" "$PACKAGE/licenses/BoomInstaller-NOTICE.md"
 cp "$ROOT/LICENSE" "$PACKAGE/licenses/NeoZygisk-GPL-3.0-LICENSE"
 cp "$ROOT/LICENSE" "$PACKAGE/licenses/Vector-GPL-3.0-LICENSE"
 cp "$ROOT/LICENSE" "$PACKAGE/licenses/MagiskPolicy-GPL-3.0-LICENSE"

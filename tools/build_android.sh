@@ -16,7 +16,8 @@ cargo ndk --help >/dev/null 2>&1 || {
 cargo test --all
 cargo ndk -t arm64-v8a -P 33 build --release
 
-binary="$ROOT/target/aarch64-linux-android/release/xpad2"
+target_dir=${CARGO_TARGET_DIR:-$ROOT/target}
+binary="$target_dir/aarch64-linux-android/release/xpad2"
 [[ -x "$binary" ]] || {
   printf 'Android binary missing: %s\n' "$binary" >&2
   exit 1

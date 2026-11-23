@@ -84,34 +84,35 @@ adb shell /data/local/tmp/xpad2 version
 手工恢复；恢复文件必须来自 GitHub Latest，不能照搬历史 tag 内的旧指南。
 
 当前正式版本是
-[`v0.7.5`](https://github.com/yoyicue/xpad2-cli/releases/tag/v0.7.6)。只需要下载：
+[`v0.7.7`](https://github.com/yoyicue/xpad2-cli/releases/tag/v0.7.7)。只需要下载：
 
 ```text
-xpad2-v0.7.6-android-arm64
+xpad2-v0.7.7-android-arm64
 ```
 
-v0.7.6 在 v0.7.4 基础上把 PD2 Root 范围扩为 `/19`–`/308`（V261026 固件，内核
-4.19.191+ 2026-10-26 构建，kallsyms offset 与 /272 完全一致，直接复用已验证的
-PoC v1.4.0 制品）；PD2P 维持 `/19`–`/272` 不变。
+v0.7.7 在 v0.7.6（PD2 `/19`–`/308`、PD2P `/19`–`/272`）基础上将可选 Hook 供应链升级到
+NeoZygisk v2.4 (289) 与 Vector v2.2 (3080)，并通过锁定 `magiskpolicy` v30.7 加载经审计的
+最小 live SEPolicy，修复 SELinux Enforcing 下 Vector 寄生管理器“部分激活 / SEPolicy
+未被正确加载”与 `dex2oat` 升级残留问题；默认 `full` / `suu-full` 行为不变。
 
 macOS 或 Linux 可以直接执行：
 
 ```sh
-curl -fLO https://github.com/yoyicue/xpad2-cli/releases/download/v0.7.6/xpad2-v0.7.6-android-arm64
-shasum -a 256 xpad2-v0.7.6-android-arm64
+curl -fLO https://github.com/yoyicue/xpad2-cli/releases/download/v0.7.7/xpad2-v0.7.7-android-arm64
+shasum -a 256 xpad2-v0.7.7-android-arm64
 ```
 
 Windows PowerShell 可以执行：
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/yoyicue/xpad2-cli/releases/download/v0.7.6/xpad2-v0.7.6-android-arm64" -OutFile "xpad2-v0.7.6-android-arm64"
-Get-FileHash .\xpad2-v0.7.6-android-arm64 -Algorithm SHA256
+Invoke-WebRequest -Uri "https://github.com/yoyicue/xpad2-cli/releases/download/v0.7.7/xpad2-v0.7.7-android-arm64" -OutFile "xpad2-v0.7.7-android-arm64"
+Get-FileHash .\xpad2-v0.7.7-android-arm64 -Algorithm SHA256
 ```
 
 正确的 SHA-256 是：
 
 ```text
-f3a8d50a42075fd2e8105fec6238247494cdd252be303b7bf49ea47877ab354c
+d427ba223526753a52e85eee610f63a912cb575d96aa036eb1b7f268e37ef9df
 ```
 
 哈希不一致时不要继续，重新下载文件。
@@ -121,7 +122,7 @@ f3a8d50a42075fd2e8105fec6238247494cdd252be303b7bf49ea47877ab354c
 本节仅适用于首次安装或损坏恢复。在下载文件所在目录执行：
 
 ```sh
-adb push xpad2-v0.7.6-android-arm64 /data/local/tmp/xpad2
+adb push xpad2-v0.7.7-android-arm64 /data/local/tmp/xpad2
 adb shell chmod 700 /data/local/tmp/xpad2
 adb shell /data/local/tmp/xpad2 version
 ```
@@ -129,7 +130,7 @@ adb shell /data/local/tmp/xpad2 version
 最后一条命令应显示：
 
 ```text
-xpad2 0.7.4 (catalog 2026-07-29.2)
+xpad2 0.7.7 (catalog 2026-11-23.1)
 ```
 
 这就表示 `xpad2` 已经安装到了：

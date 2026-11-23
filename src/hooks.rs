@@ -16,20 +16,94 @@ const KSU_MODULES_UPDATE: &str = "/data/adb/modules_update";
 const KSUD: &str = "/data/adb/ksud";
 const MAGISKPOLICY_ARTIFACT: &str = "magiskpolicy";
 const MAGISKPOLICY: &str = "/data/adb/xpad2/bin/magiskpolicy";
-const SYSTEM_SERVER_EXECMEM: &str = "allow system_server system_server process execmem";
+const VECTOR_POLICY_MARKER: &str = "minimal-live-vector-dex2oat-v1";
+const VECTOR_LIVE_POLICY_RULES: &str = "\
+allow system_server system_server process execmem
+allow dex2oat dex2oat_exec file execute_no_trans
+allow dex2oat system_linker_exec file execute_no_trans
+allow dex2oat tmpfs file { ioctl read write create getattr setattr lock append map execute open }
+allow zygote dex2oat unix_stream_socket { read write getattr getopt setopt shutdown connectto }
+allow shell shell dir write
+type xposed_file file_type
+typeattribute xposed_file mlstrustedobject
+allow dex2oat xposed_file file { read getattr map open }
+allow zygote xposed_file file { read getattr map open }
+allow installd xposed_file file { ioctl read write create getattr setattr lock unlink rename open }
+allow installd xposed_file dir { ioctl read write create getattr setattr lock unlink rename open search add_name remove_name rmdir }
+allow shell xposed_file file { ioctl read write create getattr setattr lock append map unlink rename open }
+allow shell xposed_file dir { ioctl read write create getattr setattr lock unlink rename open search add_name remove_name rmdir }
+allow isolated_app xposed_file file { read getattr map open }
+allow isolated_app xposed_file dir { read getattr open search }
+type xposed_data file_type
+typeattribute xposed_data mlstrustedobject
+allow appdomain xposed_data file { ioctl read getattr lock map execute open }
+allow appdomain xposed_data dir { ioctl read getattr open search }
+allow system_server xposed_data file { ioctl read getattr lock map execute open }
+allow system_server xposed_data dir { ioctl read getattr open search }
+";
+const VECTOR_REVOKE_CORE_RULES: &str = "\
+deny system_server system_server process execmem
+deny dex2oat dex2oat_exec file execute_no_trans
+deny dex2oat system_linker_exec file execute_no_trans
+deny dex2oat tmpfs file { ioctl write create setattr lock append execute open }
+deny zygote dex2oat unix_stream_socket { read write getattr getopt setopt shutdown connectto }
+deny shell shell dir write
+";
+const VECTOR_REVOKE_XPOSED_FILE_RULES: &str = "\
+deny dex2oat xposed_file file *
+deny zygote xposed_file file *
+deny installd xposed_file { file dir } *
+deny shell xposed_file { file dir } *
+deny isolated_app xposed_file { file dir } *
+";
+const VECTOR_REVOKE_XPOSED_DATA_RULES: &str = "\
+deny appdomain xposed_data { file dir } *
+deny system_server xposed_data { file dir } *
+";
+const UNMOUNT_DEX2OAT_BINDS: &str = r#"for xpad2_target in \
+  /apex/com.android.art/bin/dex2oat32 \
+  /apex/com.android.art/bin/dex2oatd32 \
+  /apex/com.android.art/bin/dex2oat64 \
+  /apex/com.android.art/bin/dex2oatd64 \
+  /system/apex/com.android.art/bin/dex2oat32 \
+  /system/apex/com.android.art/bin/dex2oatd32 \
+  /system/apex/com.android.art/bin/dex2oat64 \
+  /system/apex/com.android.art/bin/dex2oatd64; do
+  while grep -q " $xpad2_target " /proc/1/mountinfo 2>/dev/null; do
+    umount -l "$xpad2_target" 2>/dev/null || umount "$xpad2_target" 2>/dev/null || break
+  done
+done
+"#;
+
+const VECTOR_POLICY_AWK_CHECK: &str = r#"awk '
+  /^allow system_server system_server process / && /execmem/ { r1=1 }
+  /^allow dex2oat dex2oat_exec file / && /execute_no_trans/ { r2=1 }
+  /^allow dex2oat system_linker_exec file / && /execute_no_trans/ { r3=1 }
+  /^allow dex2oat tmpfs file / && /execute/ && /write/ { r4=1 }
+  /^allow zygote dex2oat unix_stream_socket / && /connectto/ { r5=1 }
+  /^allow shell shell dir / && /write/ { r10=1 }
+  /^type xposed_file / { r6=1 }
+  /^type xposed_data / { r7=1 }
+  /^allow dex2oat xposed_file file / && /read/ { r8=1 }
+  /^allow appdomain xposed_data file / && /read/ { r9=1 }
+  /^allow untrusted_app dex2oat_exec file / && /(execute|execute_no_trans)/ { bad=1 }
+  END { exit (r1 && r2 && r3 && r4 && r5 && r6 && r7 && r8 && r9 && r10 && !bad) ? 0 : 1 }
+'"#;
 
 const ZYGISK_ARTIFACT: &str = "neozygisk-module";
 const ZYGISK_MODULE: &str = "zygisksu";
-const ZYGISK_VERSION_CODE: &str = "275";
+const ZYGISK_VERSION_CODE: &str = "289";
 const ZYGISK_MARKER: &str = "xpad2-ls12-compat";
 
 const VECTOR_ARTIFACT: &str = "vector-module";
 const VECTOR_MODULE: &str = "zygisk_vector";
-const VECTOR_VERSION_CODE: &str = "3021";
+const VECTOR_VERSION_CODE: &str = "3080";
 const VECTOR_MARKER: &str = "xpad2-ls12-compat";
 
 const STOCK_ZYGISK_CONTEXT: &[u8] = b"u:object_r:zygisk_file:s0";
 const LS12_ZYGISK_CONTEXT: &[u8] = b"u:object_r:ksu_file:s0:c0";
+const STOCK_ZYGISK_WORKDIR: &[u8] = b"/data/adb/neozygisk\0";
+const LS12_ZYGISK_WORKDIR: &[u8] = b"/dev/neozygisk\0\0\0\0\0\0";
 
 #[derive(Clone, Copy)]
 struct HookSpec {
@@ -146,7 +220,7 @@ if [ -n "$zygote_pid" ]; then
   grep -q '/dev/neozygisk/lib64/libzygisk.so' "/proc/$zygote_pid/maps" 2>/dev/null && map=ok
 fi
 if grep -q '^module_memfd_context=u:object_r:ksu_file:s0:c0$' "$marker" 2>/dev/null && \
-   grep -q '^policy=minimal-live-system-server-execmem$' "$marker" 2>/dev/null; then
+   grep -q '^ptrace_workdir=/dev/neozygisk$' "$marker" 2>/dev/null; then
   compat=ok
 fi
 zygiskd_pid=$(pidof zygiskd64 2>/dev/null | awk '{print $1}')
@@ -176,7 +250,7 @@ printf 'XPAD2_ZYGISK_HEALTH enforcing=%s monitor=%s zygote=%s daemon=%s monitor_
         Ok(component_status(
             ZYGISK.id,
             ComponentState::Active,
-            Some("NeoZygisk v2.3 injected into zygote64; XPad2 compatibility verified"),
+            Some("NeoZygisk v2.4 injected into zygote64; XPad2 compatibility verified"),
         ))
     } else {
         Ok(component_status(
@@ -245,30 +319,41 @@ fn vector_status_inner() -> Result<ComponentStatus> {
             Some("Vector is enabled but its NeoZygisk dependency is not active"),
         ));
     }
-    let health = root::root_exec(
+    let health = root::root_exec(&format!(
         r#"
 compat=bad
-lspd_count=0
+vectord_count=0
 registered=bad
 database=bad
 policy=bad
+dex2oat=bad
 system_map=bad
 bridge=bad
 enforcing=bad
 test "$(getenforce 2>/dev/null)" = Enforcing && enforcing=ok
 marker=/data/adb/modules/zygisk_vector/xpad2-ls12-compat
 if grep -q '^system_server=true$' "$marker" 2>/dev/null && \
-   grep -q '^policy=minimal-live-system-server-execmem$' "$marker" 2>/dev/null && \
+   grep -q '^dex2oat=true$' "$marker" 2>/dev/null && \
+   grep -q '^policy=minimal-live-vector-dex2oat-v1$' "$marker" 2>/dev/null && \
    grep -q -- '--system-server-max-retry=0' /data/adb/modules/zygisk_vector/service.sh 2>/dev/null; then
   compat=ok
 fi
-set -- $(pidof lspd 2>/dev/null)
-lspd_count=$#
+set -- $(pidof vectord 2>/dev/null)
+vectord_count=$#
 grep -q 'zygisk_vector' /dev/neozygisk/module.prop 2>/dev/null && registered=ok
 [ -f /data/adb/lspd/config/modules_config.db ] && database=ok
-/data/adb/xpad2/bin/magiskpolicy --print-rules 2>/dev/null | \
-  grep -F 'allow system_server system_server process' | grep -q 'execmem' && policy=ok
-system_pid=$(pidof system_server 2>/dev/null | awk '{print $1}')
+if /data/adb/xpad2/bin/magiskpolicy --print-rules 2>/dev/null | {policy_check}; then
+  policy=ok
+fi
+if [ -f /data/adb/modules/zygisk_vector/bin/dex2oat64 ] && [ -f /apex/com.android.art/bin/dex2oat64 ]; then
+  mod_ino=$(stat -c '%d:%i' /data/adb/modules/zygisk_vector/bin/dex2oat64 2>/dev/null)
+  apex_ino=$(stat -c '%d:%i' /apex/com.android.art/bin/dex2oat64 2>/dev/null)
+  if [ -n "$mod_ino" ] && [ "$mod_ino" = "$apex_ino" ] && \
+     ls -Z /apex/com.android.art/bin/dex2oat64 2>/dev/null | grep -q 'u:object_r:dex2oat_exec:s0'; then
+    dex2oat=ok
+  fi
+fi
+system_pid=$(pidof system_server 2>/dev/null | awk '{{print $1}}')
 if [ -n "$system_pid" ]; then
   grep -q '/memfd:zygisk-module' "/proc/$system_pid/maps" 2>/dev/null && system_map=ok
 fi
@@ -276,13 +361,14 @@ verbose=$(ls -1t /data/adb/lspd/log/verbose_* 2>/dev/null | head -n 1)
 if [ -n "$verbose" ] && [ -n "$system_pid" ]; then
   grep -Eq ": *$system_pid:.*Injected Vector framework into system_server" "$verbose" 2>/dev/null && bridge=ok
 fi
-printf 'XPAD2_VECTOR_HEALTH enforcing=%s compat=%s lspd_count=%s registered=%s database=%s policy=%s system_map=%s bridge=%s\n' \
-  "$enforcing" "$compat" "$lspd_count" "$registered" "$database" "$policy" "$system_map" "$bridge"
-[ "$compat" = ok ] && [ "$lspd_count" = 1 ] && [ "$registered" = ok ] && \
-  [ "$database" = ok ] && [ "$policy" = ok ] && [ "$system_map" = ok ] && \
-  [ "$bridge" = ok ] && [ "$enforcing" = ok ]
+printf 'XPAD2_VECTOR_HEALTH enforcing=%s compat=%s vectord_count=%s registered=%s database=%s policy=%s dex2oat=%s system_map=%s bridge=%s\n' \
+  "$enforcing" "$compat" "$vectord_count" "$registered" "$database" "$policy" "$dex2oat" "$system_map" "$bridge"
+[ "$compat" = ok ] && [ "$vectord_count" = 1 ] && [ "$registered" = ok ] && \
+  [ "$database" = ok ] && [ "$policy" = ok ] && [ "$dex2oat" = ok ] && \
+  [ "$system_map" = ok ] && [ "$bridge" = ok ] && [ "$enforcing" = ok ]
 "#,
-    )?;
+        policy_check = VECTOR_POLICY_AWK_CHECK,
+    ))?;
     if health.status == 0
         && health
             .text
@@ -292,7 +378,7 @@ printf 'XPAD2_VECTOR_HEALTH enforcing=%s compat=%s lspd_count=%s registered=%s d
             VECTOR.id,
             ComponentState::Active,
             Some(&format!(
-                "Vector v2.0 bridge active under Enforcing SELinux; {}",
+                "Vector v2.2 bridge and dex2oat active under Enforcing SELinux; {}",
                 health.text
             )),
         ))
@@ -444,13 +530,26 @@ fn patch_zygisk(paths: &Paths, root: &RootSession, stage: &str) -> Result<()> {
     atomic_write(&local_daemon, &daemon, 0o700)?;
     copy_to_root(root, &local_daemon, &remote_daemon, 0o755)?;
 
+    let remote_ptrace = format!("{stage}/bin/zygisk-ptrace64");
+    let local_ptrace = paths.work.join("neo-zygisk-ptrace64");
+    copy_from_root(root, &remote_ptrace, &local_ptrace)?;
+    let mut ptrace = fs::read(&local_ptrace).at(&local_ptrace)?;
+    replace_exact_once(
+        &mut ptrace,
+        STOCK_ZYGISK_WORKDIR,
+        LS12_ZYGISK_WORKDIR,
+        "NeoZygisk ptrace workdir",
+    )?;
+    atomic_write(&local_ptrace, &ptrace, 0o700)?;
+    copy_to_root(root, &local_ptrace, &remote_ptrace, 0o755)?;
+
     disable_module_sepolicy(root, stage)?;
     write_marker(
         paths,
         root,
         stage,
         ZYGISK_MARKER,
-        "component=zygisk\nupstream=NeoZygisk-v2.3-275\nworkdir=/dev/neozygisk\nsocket_context=u:object_r:ksu_file:s0:c0\nmodule_memfd_context=u:object_r:ksu_file:s0:c0\npolicy=minimal-live-system-server-execmem\n",
+        "component=zygisk\nupstream=NeoZygisk-v2.4-289\nworkdir=/dev/neozygisk\nptrace_workdir=/dev/neozygisk\nsocket_context=u:object_r:ksu_file:s0:c0\nmodule_memfd_context=u:object_r:ksu_file:s0:c0\n",
     )
 }
 
@@ -527,22 +626,24 @@ fn patch_vector(paths: &Paths, root: &RootSession, stage: &str) -> Result<()> {
     copy_from_root(root, &remote, &local)?;
     let mut text = fs::read_to_string(&local).at(&local)?;
     text = patch_vector_service(&text)?;
-    if !text.contains("# xpad2-kill-stale-lspd-v1") {
+    if !text.contains("# xpad2-kill-stale-vectord-v2") {
         let newline = text
             .find('\n')
-            .ok_or_else(|| msg("Vector service.sh has no shebang line"))?;
+            .ok_or_else(|| msg("Vector service.sh has no header line"))?;
         text.insert_str(
             newline + 1,
-            "# xpad2-kill-stale-lspd-v1\npkill -9 lspd 2>/dev/null || true\n",
+            &format!(
+                "# xpad2-kill-stale-vectord-v2\npkill -9 vectord 2>/dev/null || true\npkill -9 lspd 2>/dev/null || true\n{UNMOUNT_DEX2OAT_BINDS}"
+            ),
         );
     }
-    if !text.contains("# xpad2-vector-watchdog-v1") {
+    if !text.contains("# xpad2-vector-watchdog-v2") {
         text.push_str(
             r#"
-# xpad2-vector-watchdog-v1
+# xpad2-vector-watchdog-v2
 (
   sleep 25
-  if ! pidof lspd >/dev/null 2>&1; then
+  if ! pidof vectord >/dev/null 2>&1; then
     touch "$MODDIR/disable"
     log -p e -t xpad2 'Vector daemon failed activation; module disabled'
   fi
@@ -558,7 +659,9 @@ fn patch_vector(paths: &Paths, root: &RootSession, stage: &str) -> Result<()> {
         root,
         stage,
         VECTOR_MARKER,
-        "component=vector\nupstream=Vector-v2.0-3021\nmode=system-server-bridge\nsystem_server=true\ndex2oat=false\npolicy=minimal-live-system-server-execmem\n",
+        &format!(
+            "component=vector\nupstream=Vector-v2.2-3080\nmode=system-server-bridge+dex2oat\nsystem_server=true\ndex2oat=true\npolicy={VECTOR_POLICY_MARKER}\n"
+        ),
     )
 }
 
@@ -756,13 +859,24 @@ fn install_policy_tool(
     Ok(())
 }
 
-fn apply_live_policy(root: &RootSession, log: &mut TransactionLog) -> Result<()> {
+fn apply_live_policy(paths: &Paths, root: &RootSession, log: &mut TransactionLog) -> Result<()> {
+    let local_rules = paths.work.join("vector-live.rules");
+    atomic_write(&local_rules, VECTOR_LIVE_POLICY_RULES.as_bytes(), 0o600)?;
+    let local_text = local_rules
+        .to_str()
+        .ok_or_else(|| msg("local Vector policy path is not valid UTF-8"))?;
+    let remote_rules = "/data/adb/xpad2/vector-live.rules";
     let command = format!(
-        "{tool} --live {rule} && \
-         {tool} --print-rules 2>/dev/null | \
-         grep -F 'allow system_server system_server process' | grep -q execmem",
+        "cp {local} {remote}.xpad2-new && chown 0:0 {remote}.xpad2-new && \
+         chmod 600 {remote}.xpad2-new && chcon u:object_r:ksu_file:s0:c0 {remote}.xpad2-new && \
+         mv -f {remote}.xpad2-new {remote} && \
+         {tool} --live --apply {remote}; \
+         rc=$?; rm -f {remote}; [ \"$rc\" -eq 0 ] || exit \"$rc\"; \
+         {tool} --print-rules 2>/dev/null | {policy_check}",
+        local = shell_quote(local_text),
+        remote = shell_quote(remote_rules),
         tool = shell_quote(MAGISKPOLICY),
-        rule = shell_quote(SYSTEM_SERVER_EXECMEM),
+        policy_check = VECTOR_POLICY_AWK_CHECK,
     );
     let output = root.exec(&command)?;
     log.command_result(
@@ -789,7 +903,7 @@ pub fn activate(
     let components = prepare_activation(log)?;
     install_policy_tool(catalog, paths, root, log)?;
     if components.iter().any(|id| id == VECTOR.id) {
-        apply_live_policy(root, log)?;
+        apply_live_policy(paths, root, log)?;
     }
     if root.owned {
         // Keep the temporary su transport for recovery and verification, but
@@ -801,15 +915,18 @@ pub fn activate(
     let before = root.exec(
         "printf 'system_server=%s zygiskd=%s\\n' \"$(pidof system_server 2>/dev/null)\" \"$(pidof zygiskd64 2>/dev/null)\"",
     )?;
-    let enable = root.exec(
+    let enable = root.exec(&format!(
         r#"
 /data/adb/ksud module enable zygisksu
 if [ -d /data/adb/modules/zygisk_vector ] || [ -d /data/adb/modules_update/zygisk_vector ]; then
   /data/adb/ksud module enable zygisk_vector
 fi
-rm -f /data/local/tmp/xpad2-neo-memfd.log
+pkill -9 vectord 2>/dev/null || true
+pkill -9 lspd 2>/dev/null || true
+{unmount_dex2oat}rm -f /data/local/tmp/xpad2-neo-memfd.log
 "#,
-    )?;
+        unmount_dex2oat = UNMOUNT_DEX2OAT_BINDS,
+    ))?;
     log.command_result("enable hook modules", enable.status == 0, &enable.text)?;
     if enable.status != 0 {
         return Err(msg(format!("cannot enable hook modules: {}", enable.text)));
@@ -848,21 +965,24 @@ rm -f /data/local/tmp/xpad2-neo-memfd.log
             && vector
                 .as_ref()
                 .is_none_or(|status| status.state == ComponentState::Active);
+        let package_ready = ready && package_service_ready();
         let health = match &vector {
             Some(vector) => format!(
-                "zygisk={} {}; vector={} {}",
+                "zygisk={} {}; vector={} {}; package_service={}",
                 zygisk.state,
                 zygisk.detail.unwrap_or_default(),
                 vector.state,
-                vector.detail.clone().unwrap_or_default()
+                vector.detail.clone().unwrap_or_default(),
+                if package_ready { "ready" } else { "starting" }
             ),
             None => format!(
-                "zygisk={} {}",
+                "zygisk={} {}; package_service={}",
                 zygisk.state,
-                zygisk.detail.unwrap_or_default()
+                zygisk.detail.unwrap_or_default(),
+                if package_ready { "ready" } else { "starting" }
             ),
         };
-        if ready {
+        if package_ready {
             log.event("hooks", "active", json!({"health": health}))?;
             println!("✓ hooks: {health}");
             return Ok(components);
@@ -874,6 +994,12 @@ rm -f /data/local/tmp/xpad2-neo-memfd.log
         }
         thread::sleep(Duration::from_millis(500));
     }
+}
+
+fn package_service_ready() -> bool {
+    crate::util::run("/system/bin/cmd", &["package", "path", "android"]).is_ok_and(|output| {
+        output.status.success() && crate::util::output_text(&output).contains("package:")
+    })
 }
 
 pub fn dispatch_soft_reboot() -> Result<()> {
@@ -903,18 +1029,43 @@ pub fn disable(log: &mut TransactionLog) -> Result<Vec<String>> {
             "KernelSU is not loaded; hook modules cannot be managed",
         ));
     }
-    let output = root::root_exec(
+    let output = root::root_exec(&format!(
         r#"
 if [ -x /data/adb/xpad2/bin/magiskpolicy ]; then
-  /data/adb/xpad2/bin/magiskpolicy --live "deny system_server system_server process execmem" || exit $?
+  rules_file=/data/adb/xpad2/vector-revoke.rules
+  mkdir -p /data/adb/xpad2
+  cat <<'XPAD2_REVOKE_EOF' >"$rules_file"
+{core}XPAD2_REVOKE_EOF
+  xposed_types=$(/data/adb/xpad2/bin/magiskpolicy --print-rules 2>/dev/null | awk '/^type (xposed_file|xposed_data) / {{ print $2 }}')
+  case "$xposed_types" in
+    *xposed_file*)
+      cat <<'XPAD2_REVOKE_EOF' >>"$rules_file"
+{xposed_file}XPAD2_REVOKE_EOF
+      ;;
+  esac
+  case "$xposed_types" in
+    *xposed_data*)
+      cat <<'XPAD2_REVOKE_EOF' >>"$rules_file"
+{xposed_data}XPAD2_REVOKE_EOF
+      ;;
+  esac
+  /data/adb/xpad2/bin/magiskpolicy --live --apply "$rules_file"
+  rc=$?
+  rm -f "$rules_file"
+  [ "$rc" -eq 0 ] || exit "$rc"
 fi
 /data/adb/ksud module disable zygisk_vector 2>/dev/null || true
 /data/adb/ksud module disable zygisksu 2>/dev/null || true
+pkill -9 vectord 2>/dev/null || true
 pkill -9 lspd 2>/dev/null || true
-pkill -9 zygisk-ptrace64 2>/dev/null || true
+{unmount_dex2oat}pkill -9 zygisk-ptrace64 2>/dev/null || true
 pkill -9 zygiskd64 2>/dev/null || true
 "#,
-    )?;
+        core = VECTOR_REVOKE_CORE_RULES,
+        xposed_file = VECTOR_REVOKE_XPOSED_FILE_RULES,
+        xposed_data = VECTOR_REVOKE_XPOSED_DATA_RULES,
+        unmount_dex2oat = UNMOUNT_DEX2OAT_BINDS,
+    ))?;
     log.command_result("disable hook modules", output.status == 0, &output.text)?;
     if output.status != 0 {
         return Err(msg(format!("cannot disable hook modules: {}", output.text)));
@@ -1010,8 +1161,49 @@ mod tests {
     }
 
     #[test]
+    fn zygisk_ptrace_workdir_patch_is_length_preserving_and_idempotent() {
+        assert_eq!(STOCK_ZYGISK_WORKDIR.len(), LS12_ZYGISK_WORKDIR.len());
+        let mut bytes = [b"head\0".as_slice(), STOCK_ZYGISK_WORKDIR, b"tail".as_slice()].concat();
+        replace_exact_once(
+            &mut bytes,
+            STOCK_ZYGISK_WORKDIR,
+            LS12_ZYGISK_WORKDIR,
+            "test-workdir",
+        )
+        .expect("first patch");
+        replace_exact_once(
+            &mut bytes,
+            STOCK_ZYGISK_WORKDIR,
+            LS12_ZYGISK_WORKDIR,
+            "test-workdir",
+        )
+        .expect("idempotent patch");
+        assert!(
+            bytes
+                .windows(LS12_ZYGISK_WORKDIR.len())
+                .any(|window| window == LS12_ZYGISK_WORKDIR)
+        );
+    }
+
+    #[test]
+    fn vector_live_policy_has_no_unscoped_wildcard_allows() {
+        assert!(!VECTOR_LIVE_POLICY_RULES.contains("allow *"));
+        assert!(!VECTOR_LIVE_POLICY_RULES.contains(" *"));
+        assert!(!VECTOR_LIVE_POLICY_RULES.contains("unlabeled"));
+        assert!(!VECTOR_LIVE_POLICY_RULES.contains("untrusted_app"));
+        assert!(VECTOR_LIVE_POLICY_RULES.contains("allow system_server system_server process execmem"));
+        assert!(VECTOR_LIVE_POLICY_RULES.contains("allow dex2oat dex2oat_exec file execute_no_trans"));
+        assert!(
+            VECTOR_LIVE_POLICY_RULES
+                .contains("allow dex2oat system_linker_exec file execute_no_trans")
+        );
+        assert!(VECTOR_LIVE_POLICY_RULES.contains("type xposed_file file_type"));
+        assert!(VECTOR_LIVE_POLICY_RULES.contains("type xposed_data file_type"));
+    }
+
+    #[test]
     fn zygisk_post_fs_data_patch_adds_cleanup_and_watchdog_once() {
-        let stock = "#!/system/bin/sh\nMODDIR=${0%/*}\nexport TMP_PATH=/dev/neozygisk\n";
+        let stock = "#!/system/bin/sh\nMODDIR=${0%/*}\nTMP_PATH=/dev/neozygisk\n";
         let once = patch_zygisk_post_fs_data(stock).expect("patch");
         let twice = patch_zygisk_post_fs_data(&once).expect("patch twice");
         assert_eq!(once, twice);
@@ -1024,7 +1216,7 @@ mod tests {
 
     #[test]
     fn vector_service_patch_disables_restart_storms_idempotently() {
-        let stock = "#!/system/bin/sh\nunshare daemon --system-server-max-retry=3 &\n";
+        let stock = "# Extract the directory path\nMODDIR=\"${0%/*}\"\nunshare --propagation slave -m \"$MODDIR/daemon\" --system-server-max-retry=3 \"$@\" &\n";
         let once = patch_vector_service(stock).expect("patch");
         let twice = patch_vector_service(&once).expect("patch twice");
         assert_eq!(once, twice);

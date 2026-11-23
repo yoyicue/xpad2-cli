@@ -46,13 +46,13 @@
   "hook_artifacts": {
     "neozygisk": {
       "artifact_id": "neozygisk-module",
-      "sha256": "5c84df9f962c04855b3523a3a75022cf5e4f3ad3dfd94794ed92b43e911f3b9a",
+      "sha256": "93a1425c67bb89f58a0dcb9fc823ec93f6472214f221e667a70b67c6a6e061a1",
       "architecture": "aarch64",
       "patch_anchor_count": 1
     },
     "vector": {
       "artifact_id": "vector-module",
-      "sha256": "d5e39669c02c2c699ab948eb8f3639b348eefb7749553224a9c62fa4a2f2dc18",
+      "sha256": "9ee8323575d615f7b3f1076ff60b2a63a49390ef11881b52632311a37f6f79cc",
       "architecture": "aarch64",
       "patch_anchor_count": 1
     }
