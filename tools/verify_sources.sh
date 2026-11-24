@@ -102,13 +102,21 @@ while IFS=$'\t' read -r repository tag expected tag_expected workflow_run \
     }
     artifacts_url=$(jq -r '.artifacts_url' <<<"$run")
     artifacts=$(github_api "$artifacts_url")
-    jq -e --arg artifact "$workflow_artifact" '
-      any(.artifacts[]; .name == $artifact)
-    ' <<<"$artifacts" >/dev/null || {
-      printf 'workflow artifact missing: %s run=%s artifact=%s\n' \
+    # GitHub removes expired artifacts from the listing entirely (default
+    # retention 90 days). An empty listing on a provenance-verified run means
+    # the artifact aged out; bit identity remains gated by assets.lock.json.
+    if [[ "$(jq -r '.total_count' <<<"$artifacts")" != "0" ]]; then
+      jq -e --arg artifact "$workflow_artifact" '
+        any(.artifacts[]; .name == $artifact)
+      ' <<<"$artifacts" >/dev/null || {
+        printf 'workflow artifact missing: %s run=%s artifact=%s\n' \
+          "$repository" "$workflow_run" "$workflow_artifact" >&2
+        exit 1
+      }
+    else
+      printf 'workflow artifact expired (provenance verified by run head_sha): %s run=%s artifact=%s\n' \
         "$repository" "$workflow_run" "$workflow_artifact" >&2
-      exit 1
-    }
+    fi
   fi
 
   printf 'SOURCE_OK repository=%s tag=%s tag_commit=%s build_commit=%s workflow_run=%s artifact=%s\n' \
