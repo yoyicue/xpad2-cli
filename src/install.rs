@@ -3,7 +3,7 @@ use crate::catalog::{Catalog, ResolvedArtifact};
 use crate::device;
 use crate::error::{IoContext, Result, msg, needs_reboot};
 use crate::logging::TransactionLog;
-use crate::model::{ApkIdentity, Artifact, ComponentState};
+use crate::model::{ApkIdentity, ApksBundleIdentity, Artifact, ComponentState};
 use crate::root::RootSession;
 use crate::util::{
     Paths, atomic_write, copy_atomic, safe_filename, sha256_bytes, sha256_file, shell_quote,
@@ -435,7 +435,159 @@ pub fn install_arbitrary_apk(
     {
         return Err(msg("independent PackageManager APK verification failed"));
     }
+    ensure_installer_backup(xpad_installer, log)?;
     Ok(installed)
+}
+
+struct TempFileGuard(PathBuf);
+
+impl Drop for TempFileGuard {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
+}
+
+pub fn install_arbitrary_apks(
+    path: &Path,
+    paths: &Paths,
+    xpad_installer: &Artifact,
+    log: &mut TransactionLog,
+) -> Result<ApksBundleIdentity> {
+    let (bundle, staged_bundle) = apk::prepare_apks_bundle(path, &paths.work)?;
+    let _staged_guard = TempFileGuard(staged_bundle.clone());
+    println!(
+        "APKS: package={} versionCode={} members={} splits={} certSHA256={} ABI={}",
+        bundle.package,
+        bundle.version_code,
+        bundle.apk_count,
+        if bundle.split_names.is_empty() {
+            "none".to_string()
+        } else {
+            bundle.split_names.join(",")
+        },
+        bundle.cert_sha256,
+        if bundle.native_abis.is_empty() {
+            "none".to_string()
+        } else {
+            bundle.native_abis.join(",")
+        }
+    );
+    let mut already_installed = false;
+    if let Some(installed) = device::installed_apk_identity(&bundle.package)? {
+        already_installed = true;
+        if installed.cert_sha256 != bundle.cert_sha256 {
+            return Err(msg(format!(
+                "installed {} uses a different signing certificate; refusing uninstall/data loss",
+                bundle.package
+            )));
+        }
+        if installed.version_code > bundle.version_code {
+            log.event(
+                "apks",
+                "skipped",
+                json!({
+                    "package": bundle.package,
+                    "installed_version": installed.version_code,
+                    "candidate_version": bundle.version_code,
+                }),
+            )?;
+            return Ok(bundle);
+        }
+        if installed.version_code == bundle.version_code {
+            let installed_paths = device::installed_apk_paths(&bundle.package)?;
+            if installed_paths.len() >= bundle.apk_count {
+                log.event(
+                    "apks",
+                    "skipped",
+                    json!({
+                        "package": bundle.package,
+                        "installed_version": installed.version_code,
+                        "installed_members": installed_paths.len(),
+                        "candidate_members": bundle.apk_count,
+                    }),
+                )?;
+                return Ok(bundle);
+            }
+        }
+    }
+    let verified = device::verify_locked_cli_path(xpad_installer).map_err(|error| {
+        msg(format!(
+            "xpad-install is missing or unverified; run `xpad2 install xpad-installer`: {error}"
+        ))
+    })?;
+    let staged_text = staged_bundle
+        .to_str()
+        .ok_or_else(|| msg("invalid staged APKS path"))?;
+    let (verb, _, action) = apk_install_plan(already_installed);
+    println!(
+        "{action} {}（{} 个 APK 成员）：通过受管 0044 多文件会话原子提交；若需修复安装身份，提交后会只读检测最多约 5 分钟。",
+        bundle.package, bundle.apk_count
+    );
+    log.event(
+        "apks",
+        "installing",
+        json!({
+            "package": bundle.package,
+            "version_code": bundle.version_code,
+            "apk_count": bundle.apk_count,
+            "splits": bundle.split_names,
+            "operation": verb,
+            "backend": "direct",
+        }),
+    )?;
+    let command_name = format!("xpad-install {verb} --backend direct");
+    let output = log.run_streaming(
+        &command_name,
+        verified,
+        &[verb, "--backend", "direct", staged_text],
+    )?;
+    if !output.status.success() {
+        return Err(classify_installer_error(
+            if already_installed {
+                "APKS upgrade"
+            } else {
+                "APKS install"
+            },
+            output.status.code(),
+            &output.text,
+        ));
+    }
+    let installed = device::installed_apk_identity(&bundle.package)?.ok_or_else(|| {
+        msg(format!(
+            "PackageManager cannot find {} after APKS install",
+            bundle.package
+        ))
+    })?;
+    let installed_paths = device::installed_apk_paths(&bundle.package)?;
+    if installed.version_code != bundle.version_code
+        || installed.cert_sha256 != bundle.cert_sha256
+        || installed_paths.len() < bundle.apk_count
+    {
+        return Err(msg(format!(
+            "independent PackageManager APKS verification failed for {} (installed members={}, expected>={})",
+            bundle.package,
+            installed_paths.len(),
+            bundle.apk_count
+        )));
+    }
+    if device::installer_attribution(&bundle.package).is_none() {
+        return Err(msg(format!(
+            "PackageManager did not report installer attribution for {}",
+            bundle.package
+        )));
+    }
+    ensure_installer_backup(xpad_installer, log)?;
+    log.event(
+        "apks",
+        "installed",
+        json!({
+            "package": bundle.package,
+            "version_code": bundle.version_code,
+            "apk_count": installed_paths.len(),
+            "cert_sha256": bundle.cert_sha256,
+        }),
+    )?;
+    Ok(bundle)
 }
 
 fn verified_bytes(resolved: &ResolvedArtifact<'_>) -> Result<Vec<u8>> {

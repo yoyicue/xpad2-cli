@@ -115,6 +115,10 @@ v2.4 新增 `zygisk-ptrace64` 等长 workdir 补丁（`/data/adb/neozygisk\0` ->
 与 `unlabeled` 宽泛规则的前提下，通过锁定 MagiskPolicy v30.7 加载经审计的最小 `dex2oat`、
 `xposed_file` 与 `xposed_data` live 策略，并在 `hooks disable` 中对称撤销；状态验活新增
 `dex2oat64` bind-mount 与 `dex2oat_exec` 上下文校验。
+v0.7.8 升级内嵌 `xpad-installer` 至 v0.2.15，新增 `xpad2 install apks FILE`（并在
+`xpad2 install apk FILE` 中自动识别 `.apks` 路由）：在 Rust 侧对 `.apks` 内全部成员逐一完成
+AXML manifest、单一 base + 唯一 split、包名/版本/v2-v3 签名证书一致性以及 `arm64-v8a`
+兼容性校验并过滤异构 ABI split 后，经受管 0044 身份的 `DirectInstaller` 单会话多流原子提交。
 
 ## 1. 产品定义
 

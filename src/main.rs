@@ -416,6 +416,7 @@ fn command_install(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<
     match first {
         "cli" => install_arbitrary_cli(catalog, paths, &args[1..]),
         "apk" => install_arbitrary_apk(catalog, paths, &args[1..]),
+        "apks" => install_arbitrary_apks(catalog, paths, &args[1..]),
         _ => transaction::install_components(catalog, paths, args),
     }
 }
@@ -467,6 +468,9 @@ fn install_arbitrary_apk(catalog: &Catalog, paths: &Paths, args: &[String]) -> R
         return Err(msg("usage: xpad2 install apk FILE"));
     }
     let source = PathBuf::from(&args[0]);
+    if apk::is_apks_archive(&source)? {
+        return install_arbitrary_apks(catalog, paths, args);
+    }
     simple_transaction(paths, "install apk", |log| {
         device::product_check(catalog)?;
         install::install_locked_cli(catalog, paths, "xpad-installer", log)?;
@@ -477,6 +481,28 @@ fn install_arbitrary_apk(catalog: &Catalog, paths: &Paths, args: &[String]) -> R
             identity.package, identity.version_code
         );
         Ok(vec![identity.package])
+    })
+}
+
+fn install_arbitrary_apks(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<()> {
+    if args.len() != 1 {
+        return Err(msg("usage: xpad2 install apks FILE"));
+    }
+    let source = PathBuf::from(&args[0]);
+    simple_transaction(paths, "install apks", |log| {
+        device::product_check(catalog)?;
+        install::install_locked_cli(catalog, paths, "xpad-installer", log)?;
+        let bundle = install::install_arbitrary_apks(
+            &source,
+            paths,
+            catalog.artifact("xpad-installer")?,
+            log,
+        )?;
+        println!(
+            "installed: {} versionCode={} members={}",
+            bundle.package, bundle.version_code, bundle.apk_count
+        );
+        Ok(vec![bundle.package])
     })
 }
 
@@ -706,7 +732,7 @@ fn yes_no(value: bool) -> &'static str {
 fn print_help() {
     println!(
         "xpad2 {} - XPad2-family signed installer and IonStack launcher\n\n\
-Usage:\n  xpad2 status [--json]\n  xpad2 doctor\n  xpad2 list | info COMPONENT\n  xpad2 update [--check] [--version VERSION] [--offline DIRECTORY_OR_ZIP]\n  xpad2 root [-- COMMAND ARG...]\n  xpad2 freeze ota | unfreeze ota\n  xpad2 install [COMPONENT...]             # default: full (KSU)\n  xpad2 install cli FILE [--name NAME]\n  xpad2 install apk FILE\n  xpad2 hooks activate|disable\n  xpad2 verify [COMPONENT]\n  xpad2 repair COMPONENT\n  xpad2 cleanup\n  xpad2 logs export DIRECTORY\n  xpad2 cache path|list|verify|import DIRECTORY|prune|clear\n\n\
+Usage:\n  xpad2 status [--json]\n  xpad2 doctor\n  xpad2 list | info COMPONENT\n  xpad2 update [--check] [--version VERSION] [--offline DIRECTORY_OR_ZIP]\n  xpad2 root [-- COMMAND ARG...]\n  xpad2 freeze ota | unfreeze ota\n  xpad2 install [COMPONENT...]             # default: full (KSU)\n  xpad2 install cli FILE [--name NAME]\n  xpad2 install apk FILE\n  xpad2 install apks FILE\n  xpad2 hooks activate|disable\n  xpad2 verify [COMPONENT]\n  xpad2 repair COMPONENT\n  xpad2 cleanup\n  xpad2 logs export DIRECTORY\n  xpad2 cache path|list|verify|import DIRECTORY|prune|clear\n\n\
 Built-ins: ota, ksu, suu, zygisk, vector, ksu-manager, suu-manager, xpad-installer, installer-backup, boominstaller, full, suu-full\n\
 Compatibility alias: lsposed -> vector\n\
 Global: --cache-dir DIRECTORY (or XPAD2_CACHE_DIR)\n\n\

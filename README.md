@@ -79,7 +79,7 @@ KernelSU；它会收敛以下目标状态：
 - 受支持固件的系统 OTA 主包已对 user 0 冻结；
 - KernelSU 32547 / UAPI 2 以 late-load 方式在当前 boot 激活；
 - KernelSU Manager v3.2.5-22-gccfee6dc（versionCode 32547）；
-- `/data/local/tmp/xpad-install` v0.2.14 锁定构建；
+- `/data/local/tmp/xpad-install` v0.2.15 锁定构建；
 - `installer-backup`：正式签名的无代码/无权限 anchor 持久保存 0044 attribution，
   `run-as znxrun` 独立验证为本机 OEM installer 的真实 UID；
 - BoomInstaller v13.6.0.r24.2f6e7c2：内部 Shizuku 类/AIDL/Binder 协议保持上游结构，
@@ -183,6 +183,7 @@ xpad2 install ksu|suu|zygisk|vector|ksu-manager|suu-manager|xpad-installer|insta
 xpad2 install full|suu-full
 xpad2 install cli FILE [--name NAME]
 xpad2 install apk FILE
+xpad2 install apks FILE
 xpad2 hooks activate|disable
 xpad2 verify [COMPONENT]
 xpad2 repair COMPONENT
@@ -191,10 +192,12 @@ xpad2 logs export DIRECTORY
 xpad2 cache path|list|verify|import DIRECTORY|prune|clear
 ```
 
-安装普通 APK 不会把临时 Root、simpleperf 授权或 KSU/SUU Manager 是否存在作为
-预检查条件。APK 会先解析并验证真实 manifest、ABI、v2/v3 签名和内容摘要；签名冲突
-时不会自动卸载应用或清除用户数据。首次安装和同包升级都使用 auto：目标 APK 始终在
-持久 0044 身份中提交，先尝试 OEM Provider，未提交时再尝试同一身份的 direct。若 0044
+安装普通 APK 或 `.apks` 拆分安装包不会把临时 Root、simpleperf 授权或 KSU/SUU Manager 是否存在作为
+预检查条件。APK 与 `.apks` 内的全部成员都会先解析并验证真实 manifest、包名/版本一致性、ABI、
+v2/v3 签名和内容摘要；`install apk FILE` 遇到 `.apks` 会自动路由到多文件会话路径；签名冲突
+时不会自动卸载应用或清除用户数据。首次安装和同包升级都使用 auto（`.apks` 直接使用受管 0044
+内的多文件 `direct` 会话）：目标包始终在持久 0044 身份中提交，单 APK 先尝试 OEM Provider，
+未提交时再尝试同一身份的 direct。若 0044
 缺失或失效，31317 只负责补回并复验 0044，修复成功后才开始目标安装。BoomInstaller
 激活使用已经过独立身份验证的已安装 `base.apk` 与原生 starter，控制面只保留标准
 Root/ADB-shell 身份；安装 broker 使用 APK 自带的锁定引擎，xpad2 只负责可选分发和激活。

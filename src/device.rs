@@ -739,18 +739,26 @@ pub fn installed_apk_identity(
     Ok(Some(apk::inspect(&path)?))
 }
 
-pub fn installed_apk_path(package: &str) -> crate::error::Result<Option<PathBuf>> {
+pub fn installed_apk_paths(package: &str) -> crate::error::Result<Vec<PathBuf>> {
     let output =
         run("/system/bin/pm", &["path", package]).or_else(|_| run("pm", &["path", package]))?;
     if !output.status.success() {
-        return Ok(None);
+        return Ok(Vec::new());
     }
     let text = output_text(&output);
-    let paths: Vec<_> = text
+    Ok(text
         .lines()
         .filter_map(|line| line.trim().strip_prefix("package:"))
+        .filter(|line| !line.is_empty())
         .map(PathBuf::from)
-        .collect();
+        .collect())
+}
+
+pub fn installed_apk_path(package: &str) -> crate::error::Result<Option<PathBuf>> {
+    let paths = installed_apk_paths(package)?;
+    if paths.is_empty() {
+        return Ok(None);
+    }
     let Some(path) = paths
         .iter()
         .find(|path| path.file_name().is_some_and(|name| name == "base.apk"))

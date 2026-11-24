@@ -176,11 +176,27 @@ fn default_true() -> bool {
 pub struct ApkIdentity {
     pub path: String,
     pub package: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub split: Option<String>,
     pub version_code: u64,
     pub version_name: Option<String>,
     pub cert_sha256: String,
     pub native_abis: Vec<String>,
     pub apk_sha256: String,
+    pub size: u64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ApksBundleIdentity {
+    pub path: String,
+    pub package: String,
+    pub version_code: u64,
+    pub version_name: Option<String>,
+    pub cert_sha256: String,
+    pub native_abis: Vec<String>,
+    pub split_names: Vec<String>,
+    pub apk_count: usize,
+    pub bundle_sha256: String,
     pub size: u64,
 }
 
