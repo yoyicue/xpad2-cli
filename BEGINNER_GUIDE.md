@@ -84,35 +84,34 @@ adb shell /data/local/tmp/xpad2 version
 手工恢复；恢复文件必须来自 GitHub Latest，不能照搬历史 tag 内的旧指南。
 
 当前正式版本是
-[`v0.7.7`](https://github.com/yoyicue/xpad2-cli/releases/tag/v0.7.7)。只需要下载：
+[`v0.8.0`](https://github.com/yoyicue/xpad2-cli/releases/tag/v0.8.0)。只需要下载：
 
 ```text
-xpad2-v0.7.7-android-arm64
+xpad2-v0.8.0-android-arm64
 ```
 
-v0.7.7 在 v0.7.6（PD2 `/19`–`/308`、PD2P `/19`–`/272`）基础上将可选 Hook 供应链升级到
-NeoZygisk v2.4 (289) 与 Vector v2.2 (3080)，并通过锁定 `magiskpolicy` v30.7 加载经审计的
-最小 live SEPolicy，修复 SELinux Enforcing 下 Vector 寄生管理器“部分激活 / SEPolicy
-未被正确加载”与 `dex2oat` 升级残留问题；默认 `full` / `suu-full` 行为不变。
+v0.8.0 将原生 ADB 安装能力纳入默认 `full` / `suu-full`。在拒绝 ADB 安装的 V 固件上，
+事务末尾会修改当前 boot 的 V 属性并重启一次 Android userspace（不是整机重启），随后
+验证新 `system_server` 真正允许 shell 安装会话；普通重启后需要随 full 重新应用。
 
 macOS 或 Linux 可以直接执行：
 
 ```sh
-curl -fLO https://github.com/yoyicue/xpad2-cli/releases/download/v0.7.7/xpad2-v0.7.7-android-arm64
-shasum -a 256 xpad2-v0.7.7-android-arm64
+curl -fLO https://github.com/yoyicue/xpad2-cli/releases/download/v0.8.0/xpad2-v0.8.0-android-arm64
+shasum -a 256 xpad2-v0.8.0-android-arm64
 ```
 
 Windows PowerShell 可以执行：
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/yoyicue/xpad2-cli/releases/download/v0.7.7/xpad2-v0.7.7-android-arm64" -OutFile "xpad2-v0.7.7-android-arm64"
-Get-FileHash .\xpad2-v0.7.7-android-arm64 -Algorithm SHA256
+Invoke-WebRequest -Uri "https://github.com/yoyicue/xpad2-cli/releases/download/v0.8.0/xpad2-v0.8.0-android-arm64" -OutFile "xpad2-v0.8.0-android-arm64"
+Get-FileHash .\xpad2-v0.8.0-android-arm64 -Algorithm SHA256
 ```
 
 正确的 SHA-256 是：
 
 ```text
-d427ba223526753a52e85eee610f63a912cb575d96aa036eb1b7f268e37ef9df
+848204afd73b8c206eddbfe7d747f343ba7383c3c1f863e5710b4b06c914e207
 ```
 
 哈希不一致时不要继续，重新下载文件。
@@ -122,7 +121,7 @@ d427ba223526753a52e85eee610f63a912cb575d96aa036eb1b7f268e37ef9df
 本节仅适用于首次安装或损坏恢复。在下载文件所在目录执行：
 
 ```sh
-adb push xpad2-v0.7.7-android-arm64 /data/local/tmp/xpad2
+adb push xpad2-v0.8.0-android-arm64 /data/local/tmp/xpad2
 adb shell chmod 700 /data/local/tmp/xpad2
 adb shell /data/local/tmp/xpad2 version
 ```
@@ -130,7 +129,7 @@ adb shell /data/local/tmp/xpad2 version
 最后一条命令应显示：
 
 ```text
-xpad2 0.7.7 (catalog 2026-11-23.1)
+xpad2 0.8.0 (catalog 2026-11-26.1)
 ```
 
 这就表示 `xpad2` 已经安装到了：
@@ -189,10 +188,13 @@ adb shell /data/local/tmp/xpad2 install
 5. 安装 `xpad-installer`；
 6. 建立并验证与本机 OEM installer UID 一致的 `installer-backup` 备用安装路径；
 7. 安装并激活 BoomInstaller；
-8. 恢复 SELinux Enforcing，并确认临时 Root 文件、进程和抽象监听 socket 均已清理。
+8. 启用并验证当前 boot 的原生 ADB 安装能力；
+9. 恢复 SELinux Enforcing，并确认临时 Root 文件、进程和抽象监听 socket 均已清理。
 
 临时 Root 通常需要几分钟，最多尝试 6 轮，并有 20 分钟安全截止。终端仍在持续输出时
-请耐心等待，不要重复执行命令。
+请耐心等待，不要重复执行命令。V 固件最后会重启一次 Android userspace，ADB 短暂断开
+属于预期；这不是整机重启，KSU 和 Boot ID 保持不变。断开后设备端仍会继续验证，重连并
+运行 `xpad2 adb-install status` 查看结果，不要立即重复安装。
 
 首次配置 BoomInstaller 无线调试时，Pad 可能弹出“始终允许此网络”之类的网络信任
 确认。请保持屏幕解锁并点允许；工具会等待无线 ADB 开关与 TLS 端口连续稳定后再配对，
@@ -221,6 +223,7 @@ adb shell /data/local/tmp/xpad2 status
 SELinux=Enforcing
 temporary-root  absent
 ota             active
+adb-install     active
 ksu             active
 suu             ready
 ksu-manager     installed
@@ -268,7 +271,7 @@ adb shell /data/local/tmp/xpad2 install
 
 - `xpad2`、对应 Manager、BoomInstaller、`xpad-installer`、`installer-backup` 和 OTA
   冻结状态仍然保留；
-- KSU/SUU late-load 只属于当前启动周期，可能显示为 inactive 或 absent。
+- KSU/SUU late-load 和 `adb-install` 的非 V 属性只属于当前启动周期，可能显示为 absent 或 ready。
 
 需要恢复默认 KSU profile 时重新执行：
 

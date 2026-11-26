@@ -1,3 +1,4 @@
+use crate::adb_install;
 use crate::apk;
 use crate::catalog::Catalog;
 use crate::error::{IoContext, Result, msg};
@@ -790,6 +791,7 @@ pub fn snapshot(catalog: &Catalog, paths: &Paths) -> DeviceStatus {
     let supported = technical_profile.is_some();
     let mut components = vec![
         ota::status(),
+        adb_install::status(paths),
         ksu_status(paths),
         suu_status(paths),
         hooks::zygisk_status(),

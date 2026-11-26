@@ -1,6 +1,6 @@
 use crate::catalog::Catalog;
 use crate::device;
-use crate::error::{IoContext, Result, msg};
+use crate::error::{Error, IoContext, Result, msg};
 use crate::model::Receipt;
 use crate::util::{
     Paths, atomic_write, boot_id, epoch_seconds, run, selinux, timestamp_filename, unique_id,
@@ -8,6 +8,7 @@ use crate::util::{
 use serde_json::{Map, Value, json};
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Write};
+use std::os::fd::AsRawFd;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
@@ -97,6 +98,28 @@ impl TransactionLog {
             .at(self.dir.join("events.jsonl"))?;
         self.events.flush().at(self.dir.join("events.jsonl"))?;
         self.events.sync_data().at(self.dir.join("events.jsonl"))?;
+        Ok(())
+    }
+
+    pub fn detach_output_for_restart(&self) -> Result<()> {
+        let path = self.dir.join("post-restart.log");
+        let file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .mode(0o600)
+            .open(&path)
+            .at(&path)?;
+        unsafe {
+            libc::signal(libc::SIGHUP, libc::SIG_IGN);
+            if libc::dup2(file.as_raw_fd(), libc::STDOUT_FILENO) == -1
+                || libc::dup2(file.as_raw_fd(), libc::STDERR_FILENO) == -1
+            {
+                return Err(Error::Io {
+                    path,
+                    source: std::io::Error::last_os_error(),
+                });
+            }
+        }
         Ok(())
     }
 
@@ -421,6 +444,11 @@ pub fn export_logs(catalog: &Catalog, paths: &Paths, destination: &Path) -> Resu
         atomic_write(
             &staging.join("summary.json"),
             &serde_json::to_vec_pretty(&summary)?,
+            0o600,
+        )?;
+        atomic_write(
+            &staging.join("adb-install-status.json"),
+            &serde_json::to_vec_pretty(&crate::adb_install::report(paths))?,
             0o600,
         )?;
 

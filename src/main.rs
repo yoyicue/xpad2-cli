@@ -1,3 +1,4 @@
+mod adb_install;
 mod apk;
 mod catalog;
 mod device;
@@ -10,6 +11,7 @@ mod model;
 mod ota;
 mod profile;
 mod root;
+mod runtime;
 mod transaction;
 mod update;
 mod util;
@@ -62,6 +64,7 @@ fn run_main() -> Result<()> {
         "freeze" => command_freeze(&catalog, &paths, &args[1..])?,
         "unfreeze" => command_unfreeze(&catalog, &paths, &args[1..])?,
         "install" => command_install(&catalog, &paths, &args[1..])?,
+        "adb-install" => command_adb_install(&catalog, &paths, &args[1..])?,
         "hooks" => command_hooks(&catalog, &paths, &args[1..])?,
         "repair" => command_repair(&catalog, &paths, &args[1..])?,
         "cleanup" => command_cleanup(&catalog, &paths)?,
@@ -157,6 +160,7 @@ fn command_list(catalog: &Catalog) {
     println!("vector           module   Vector v2.2 / generic system bridge + dex2oat runtime");
     println!("lsposed          alias    compatibility alias for vector");
     println!("installer-backup policy   managed 0044 device-OEM fallback installer");
+    println!("adb-install      policy   non-V Build identity for native ADB install in this boot");
     for id in [
         "ksu-manager",
         "suu-manager",
@@ -172,8 +176,10 @@ fn command_list(catalog: &Catalog) {
             );
         }
     }
-    println!("full             bundle   default: ksu + matching Manager + installers");
-    println!("suu-full         bundle   suu + matching Manager + installers");
+    println!(
+        "full             bundle   default: ksu + matching Manager + installers + adb-install"
+    );
+    println!("suu-full         bundle   suu + matching Manager + installers + adb-install");
 }
 
 fn command_info(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<()> {
@@ -181,6 +187,13 @@ fn command_info(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<()>
         return Err(msg("usage: xpad2 info COMPONENT"));
     }
     let id = hooks::canonical_id(&args[0]);
+    if id == adb_install::ID {
+        println!(
+            "id: adb-install\nkind: policy\nscope: current boot\nactivation: xpad2 adb-install enable or xpad2 install full"
+        );
+        adb_install::print_status(paths, false)?;
+        return Ok(());
+    }
     if id == "ota" {
         println!(
             "id: ota\nkind: policy\npackages: {}\nlifecycle: persistent until `xpad2 unfreeze ota`",
@@ -324,6 +337,7 @@ fn command_verify(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<(
                         && state.state == ComponentState::Ready)
             }
             "ota" => state.state == ComponentState::Active,
+            "adb-install" => state.state == ComponentState::Active,
             "boominstaller" => state.state == ComponentState::Active,
             "installer-backup" => state.state == ComponentState::Active,
             "zygisk" | "vector" => state.state == ComponentState::Active,
@@ -418,6 +432,39 @@ fn command_install(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<
         "apk" => install_arbitrary_apk(catalog, paths, &args[1..]),
         "apks" => install_arbitrary_apks(catalog, paths, &args[1..]),
         _ => transaction::install_components(catalog, paths, args),
+    }
+}
+
+fn command_adb_install(catalog: &Catalog, paths: &Paths, args: &[String]) -> Result<()> {
+    match args.first().map(String::as_str) {
+        Some("status")
+            if args.len() == 1
+                || (args.len() == 2 && args.get(1).is_some_and(|arg| arg == "--json")) =>
+        {
+            adb_install::print_status(paths, args.get(1).is_some_and(|arg| arg == "--json"))
+        }
+        Some("enable") if args.len() == 1 => {
+            simple_transaction(paths, "adb-install enable", |log| {
+                adb_install::enable(catalog, paths, log)?;
+                Ok(vec![adb_install::ID.to_string()])
+            })
+        }
+        Some("verify") if args.len() == 1 => {
+            simple_transaction(paths, "adb-install verify", |log| {
+                device::product_check(catalog)?;
+                adb_install::verify(paths, log)?;
+                Ok(vec![adb_install::ID.to_string()])
+            })
+        }
+        Some("disable") if args.len() == 1 => {
+            simple_transaction(paths, "adb-install disable", |log| {
+                adb_install::disable(catalog, paths, log)?;
+                Ok(vec![adb_install::ID.to_string()])
+            })
+        }
+        _ => Err(msg(
+            "usage: xpad2 adb-install status [--json]|enable|verify|disable",
+        )),
     }
 }
 
@@ -732,8 +779,8 @@ fn yes_no(value: bool) -> &'static str {
 fn print_help() {
     println!(
         "xpad2 {} - XPad2-family signed installer and IonStack launcher\n\n\
-Usage:\n  xpad2 status [--json]\n  xpad2 doctor\n  xpad2 list | info COMPONENT\n  xpad2 update [--check] [--version VERSION] [--offline DIRECTORY_OR_ZIP]\n  xpad2 root [-- COMMAND ARG...]\n  xpad2 freeze ota | unfreeze ota\n  xpad2 install [COMPONENT...]             # default: full (KSU)\n  xpad2 install cli FILE [--name NAME]\n  xpad2 install apk FILE\n  xpad2 install apks FILE\n  xpad2 hooks activate|disable\n  xpad2 verify [COMPONENT]\n  xpad2 repair COMPONENT\n  xpad2 cleanup\n  xpad2 logs export DIRECTORY\n  xpad2 cache path|list|verify|import DIRECTORY|prune|clear\n\n\
-Built-ins: ota, ksu, suu, zygisk, vector, ksu-manager, suu-manager, xpad-installer, installer-backup, boominstaller, full, suu-full\n\
+Usage:\n  xpad2 status [--json]\n  xpad2 doctor\n  xpad2 list | info COMPONENT\n  xpad2 update [--check] [--version VERSION] [--offline DIRECTORY_OR_ZIP]\n  xpad2 root [-- COMMAND ARG...]\n  xpad2 freeze ota | unfreeze ota\n  xpad2 install [COMPONENT...]             # default: full (KSU)\n  xpad2 install cli FILE [--name NAME]\n  xpad2 install apk FILE\n  xpad2 install apks FILE\n  xpad2 adb-install status [--json]|enable|verify|disable\n  xpad2 hooks activate|disable\n  xpad2 verify [COMPONENT]\n  xpad2 repair COMPONENT\n  xpad2 cleanup\n  xpad2 logs export DIRECTORY\n  xpad2 cache path|list|verify|import DIRECTORY|prune|clear\n\n\
+Built-ins: ota, ksu, suu, zygisk, vector, ksu-manager, suu-manager, adb-install, xpad-installer, installer-backup, boominstaller, full, suu-full\n\
 Compatibility alias: lsposed -> vector\n\
 Global: --cache-dir DIRECTORY (or XPAD2_CACHE_DIR)\n\n\
 Self-update: --reinstall repairs the same version; a downgrade also requires --allow-downgrade.\n\n\

@@ -79,6 +79,7 @@ KernelSU；它会收敛以下目标状态：
 - 受支持固件的系统 OTA 主包已对 user 0 冻结；
 - KernelSU 32547 / UAPI 2 以 late-load 方式在当前 boot 激活；
 - KernelSU Manager v3.2.5-22-gccfee6dc（versionCode 32547）；
+- 原生 ADB 安装门已对当前 boot 的 `system_server` 验证开放（`adb-install`）；
 - `/data/local/tmp/xpad-install` v0.2.15 锁定构建；
 - `installer-backup`：正式签名的无代码/无权限 anchor 持久保存 0044 attribution，
   `run-as znxrun` 独立验证为本机 OEM installer 的真实 UID；
@@ -94,8 +95,34 @@ KernelSU；它会收敛以下目标状态：
 SukiSU Ultra 是显式可选后端：`xpad2 install suu-full` 会用 LS12 真机验证且已通过
 LS14 静态门禁的 SukiSU Ultra 40796、官方 `com.sukisu.ultra` Manager v4.1.3
 替换上述 KSU runtime/Manager
-组合，其余 installer、0044 backup 和 BoomInstaller 保持相同。`ksu` 与 `suu` 共用
+组合，其余 installer、0044 backup、BoomInstaller 和 `adb-install` 保持相同。`ksu` 与 `suu` 共用
 `kernelsu` 模块名，同一 boot 只能选择一个；切换必须先普通重启。
+
+### 原生 ADB 安装
+
+V 固件的 `android.os.Build.IS_USER_V` 会让 PackageInstallerService 拒绝 ADB 安装会话。
+`full` 和 `suu-full` 会在其他组件安装完成后自动执行 `adb-install enable`：使用随 ELF
+嵌入并锁定 SHA-256 的官方 Magisk v30.7 `resetprop` applet，把当前 `V<数字>` 属性改为
+`A<相同数字>`，然后执行一次 `ksud soft-reboot`。这里只重启 Android userspace，Boot ID
+和 late-load KSU/SUU 保持不变；新 `system_server` 必须以 shell UID 通过真实
+`install-create`/`install-abandon` 验证后，整个 `full` 才算成功。已有模块若在重启阶段
+写入其他非 V 值，控制面接受实际非 V 值并重新绑定验证证据，不与模块争抢同一属性。
+
+也可以独立管理当前 boot 的能力：
+
+```sh
+xpad2 adb-install status [--json]
+xpad2 adb-install enable
+xpad2 adb-install verify
+xpad2 adb-install disable
+```
+
+`enable` 和 `full` 都是幂等的：安装门已经开放时不修改属性，也不 soft-reboot。该能力
+只持续到下一次普通重启；冷启动后重新执行 `adb-install enable` 或 `full` 即可。它会让
+新 userspace 中所有 `Build.IS_USER_V` 消费者按非 V 逻辑运行，不只影响安装器。
+`disable` 根据当前 boot 的受管记录恢复原值；记录不可信时不会猜测原值，普通重启始终
+可以恢复原厂属性。首个 `system_server` 启动前 late-load Root 尚不存在，因此本功能不
+承诺冷启动无人值守或首个 userspace 即为非 V。
 
 ### NeoZygisk / Vector
 
@@ -133,6 +160,10 @@ Vector 的自动 system_server 重启次数被固定为 0，避免失败时形�
 任何具体应用的 Hook，不管理应用 scope，也不把应用进程或业务日志作为 Vector 的成功条件。
 回滚使用 `xpad2 hooks disable`，它会撤销最小 live rule 并调度 userspace soft-reboot。
 普通重启会丢失当前 late-load KSU，不是 Hook 激活/停用手段。
+
+`full`/`suu-full` 末尾的 `adb-install` 也可能调度一次 userspace soft-reboot；ADB 短暂
+断开属于预期，设备端事务会继续等待新 `system_server`、重新验证组件后再结束，后续输出
+保存在事务目录的 `post-restart.log`。主机重连后用 `adb-install status` 查看最终结果。
 
 再次执行同一命令是幂等的：已经通过包名、版本、证书、哈希和运行时探针验证的项目
 会跳过。普通重启后 APK 和 CLI 保留，只需恢复所选 runtime。
@@ -179,11 +210,12 @@ xpad2 root [-- COMMAND ARG...]
 xpad2 freeze ota
 xpad2 unfreeze ota
 xpad2 install                              # 默认 full / KernelSU
-xpad2 install ksu|suu|zygisk|vector|ksu-manager|suu-manager|xpad-installer|installer-backup|boominstaller ...
+xpad2 install ksu|suu|zygisk|vector|ksu-manager|suu-manager|xpad-installer|installer-backup|boominstaller|adb-install ...
 xpad2 install full|suu-full
 xpad2 install cli FILE [--name NAME]
 xpad2 install apk FILE
 xpad2 install apks FILE
+xpad2 adb-install status [--json]|enable|verify|disable
 xpad2 hooks activate|disable
 xpad2 verify [COMPONENT]
 xpad2 repair COMPONENT

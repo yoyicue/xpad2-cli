@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "product_version": "0.7.8",
-  "catalog_version": "2026-11-24.1",
+  "product_version": "0.8.0",
+  "catalog_version": "2026-11-26.1",
   "profile": {
     "build_fingerprint": "alps/vnd_ls12_mt8797_wifi_64/ls12_mt8797_wifi_64:13/TP1A.220624.014/260:user/release-keys",
     "build_fingerprint_prefix": "alps/vnd_ls12_mt8797_wifi_64/ls12_mt8797_wifi_64:13/TP1A.220624.014/",
@@ -638,6 +638,20 @@
       "version": "30.7-e8a58776",
       "size": 356584,
       "sha256": "9837db9db475eb74b6715f081768cb6a1f2fb5a2b2ac15755686062501bace27",
+      "embedded": true,
+      "mode": 448,
+      "target": null,
+      "package": null,
+      "version_code": null,
+      "cert_sha256": null
+    },
+    {
+      "id": "magisk-resetprop",
+      "filename": "magisk-v30.7-arm64",
+      "kind": "internal",
+      "version": "30.7-e8a58776",
+      "size": 394232,
+      "sha256": "2d8419018dda41f7d9aca94c0ca8f926f3b8447ca5cf7fb71faeb8d05e29694e",
       "embedded": true,
       "mode": 448,
       "target": null,

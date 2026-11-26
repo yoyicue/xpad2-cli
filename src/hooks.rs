@@ -4,6 +4,7 @@ use crate::error::{IoContext, Result, msg};
 use crate::logging::TransactionLog;
 use crate::model::{ComponentState, ComponentStatus};
 use crate::root::{self, RootSession};
+use crate::runtime;
 use crate::util::{Paths, atomic_write, sha256_bytes, shell_quote};
 use serde_json::{Value, json};
 use std::fs;
@@ -942,16 +943,7 @@ pkill -9 lspd 2>/dev/null || true
     std::io::stdout()
         .flush()
         .map_err(|error| msg(format!("cannot flush activation status: {error}")))?;
-    let restart = root.exec(&format!(
-        "{} soft-reboot >/data/local/tmp/xpad2-hooks-soft-reboot.log 2>&1 &",
-        KSUD
-    ))?;
-    if restart.status != 0 {
-        return Err(msg(format!(
-            "cannot dispatch controlled userspace restart: {}",
-            restart.text
-        )));
-    }
+    runtime::dispatch_soft_reboot(root, "/data/local/tmp/xpad2-hooks-soft-reboot.log")?;
 
     let deadline = Instant::now() + Duration::from_secs(90);
     loop {
@@ -965,7 +957,7 @@ pkill -9 lspd 2>/dev/null || true
             && vector
                 .as_ref()
                 .is_none_or(|status| status.state == ComponentState::Active);
-        let package_ready = ready && package_service_ready();
+        let package_ready = ready && runtime::package_service_ready();
         let health = match &vector {
             Some(vector) => format!(
                 "zygisk={} {}; vector={} {}; package_service={}",
@@ -994,12 +986,6 @@ pkill -9 lspd 2>/dev/null || true
         }
         thread::sleep(Duration::from_millis(500));
     }
-}
-
-fn package_service_ready() -> bool {
-    crate::util::run("/system/bin/cmd", &["package", "path", "android"]).is_ok_and(|output| {
-        output.status.success() && crate::util::output_text(&output).contains("package:")
-    })
 }
 
 pub fn dispatch_soft_reboot() -> Result<()> {

@@ -93,6 +93,7 @@ source_for() {
     neozygisk-module) printf '%s\n' "$ROOT/.xpad2-artifacts/NeoZygisk-v2.4-289-release.zip" ;;
     vector-module) printf '%s\n' "$ROOT/.xpad2-artifacts/Vector-v2.2-3080-Release.zip" ;;
     magiskpolicy) printf '%s\n' "$ROOT/.xpad2-artifacts/magiskpolicy-v30.7-arm64" ;;
+    magisk-resetprop) printf '%s\n' "$ROOT/.xpad2-artifacts/magisk-v30.7-arm64" ;;
     *) return 1 ;;
   esac
 }

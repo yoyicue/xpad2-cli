@@ -119,6 +119,13 @@ v0.7.8 升级内嵌 `xpad-installer` 至 v0.2.15，新增 `xpad2 install apks FI
 `xpad2 install apk FILE` 中自动识别 `.apks` 路由）：在 Rust 侧对 `.apks` 内全部成员逐一完成
 AXML manifest、单一 base + 唯一 split、包名/版本/v2-v3 签名证书一致性以及 `arm64-v8a`
 兼容性校验并过滤异构 ABI split 后，经受管 0044 身份的 `DirectInstaller` 单会话多流原子提交。
+v0.8.0 新增 `adb-install` 当前 boot 策略，并纳入 `full`/`suu-full` 的固定目标状态：
+以锁定的官方 Magisk v30.7 多调用二进制执行 `resetprop`，将 canonical `V<数字>` 的
+`ro.genie.gota.version` 改为 `A<相同数字>`，在不改变 Boot ID 和 late-load runtime 的
+`ksud soft-reboot` 后，以 shell UID 的 `install-create`/`install-abandon` 独立验证原生
+ADB 安装门。已有模块写入其他非 V 值时接受实际值并重新验证；ADB 断连时设备端继续事务，
+后续输出写入 `post-restart.log`。状态记录绑定 Boot ID 与 system_server PID；普通重启恢复原厂属性，冷启动后
+重新执行 `adb-install enable` 或 full，不修改 boot/system/AVB，也不依赖 Zygisk 或内存补丁。
 
 ## 1. 产品定义
 
@@ -392,6 +399,11 @@ xpad2 install suu zygisk
 xpad2 install suu vector
 xpad2 install xpad-installer
 xpad2 install boominstaller
+xpad2 install adb-install
+xpad2 adb-install status [--json]
+xpad2 adb-install enable
+xpad2 adb-install verify
+xpad2 adb-install disable
 xpad2 install full
 xpad2 install suu-full
 ```
@@ -405,7 +417,8 @@ xpad2 install ksu ksu-manager boominstaller
 `full` 固定选择 KSU，`suu-full` 固定选择 SukiSU Ultra。`ksu` 与 `suu` 同一 boot
 互斥；请求混合两者必须在计划阶段失败，运行时切换必须先普通重启。单独请求
 `zygisk`/`vector` 默认补入 KSU；同一请求已经显式选择 `suu` 时必须保留 SUU，不能
-再隐式混入 KSU。
+再隐式混入 KSU。单独请求 `adb-install` 同样默认补入 KSU；显式选择 SUU 时保留 SUU。
+两个 full profile 都固定包含 `adb-install`，只有真实 shell 安装会话通过后才算完整成功。
 
 ### 4.5 任意本地制品
 
@@ -436,6 +449,7 @@ xpad2 logs export DIRECTORY
 | `ota` | policy | 受支持 XPad2 系统 OTA 主包对 user 0 不可运行 | 持久，显式解冻 |
 | `ksu` | runtime | KernelSU late-load 接口正常 | 当前启动周期 |
 | `suu` | runtime | SukiSU Ultra 40796、flags/features `0x5`、late-load 接口正常 | 当前启动周期 |
+| `adb-install` | policy | 当前 system_server 的 shell ADB 安装会话验证通过 | 当前启动周期，普通重启后重应用 |
 | `ksu-manager` | APK | `me.weishu.kernelsu` 匹配锁定版本 | 持久 |
 | `suu-manager` | APK | `com.sukisu.ultra` v4.1.3/40796 与生产签名匹配 | 持久 |
 | `xpad-installer` | CLI | `/data/local/tmp/xpad-install` 匹配锁定哈希 | 普通重启后保留 |
@@ -464,10 +478,12 @@ xpad2 logs export DIRECTORY
 11. 安装 BoomInstaller APK
 12. 激活 BoomInstaller 并配置普通开机自启动
 13. 所有 APK 事务结束后再次幂等收敛并验证 0044 anchor
-14. 验证 OTA、所选 runtime 与全部制品目标状态
-15. 恢复 SELinux Enforcing
-16. 关闭安装事务创建的临时 su daemon/client，并确认 `@ionstack_temp_su` 抽象监听消失
-17. 写入事务收据和日志，释放 operation lock
+14. 执行 `adb-install enable`；需要改变 V 状态时，写入受管恢复记录并调度一次 userspace
+    soft-reboot，等待新 system_server、PackageManager 和原 runtime
+15. 以 shell UID 完成 `install-create`/`install-abandon`，并重新验证 OTA、runtime 与全部制品
+16. 恢复 SELinux Enforcing
+17. 关闭安装事务创建的临时 su daemon/client，并确认 `@ionstack_temp_su` 抽象监听消失
+18. 写入事务收据和日志，释放 operation lock
 ```
 
 原则：
@@ -481,6 +497,15 @@ xpad2 logs export DIRECTORY
   Root 仅保留为恢复通道，直到 Enforcing 下的最终验活完成。
 - IonStack 六轮 holder 机会耗尽后停止，明确建议普通重启，不无限重试。
 - Boot ID 在危险阶段发生变化时，事务立即判为失败，不把重启后的旧文件当作成功现场。
+
+### 6.1 `adb-install` 状态合同
+
+状态保存在 `/data/local/tmp/.xpad2/state/adb-install.json`，权限 `0600` 并原子写入，记录
+策略阶段、原始/替换属性、Boot ID、runtime、system_server PID 和最近验证证据。
+`status` 只读；`verify` 创建后立即放弃一个空安装会话，不安装 APK。只有验证 Boot ID、
+PID 和当前属性都匹配时状态才是 `active`。冷启动后的旧记录转为 `ready`，事务中断、
+属性冲突或验证失败为 `broken`。每次 enable/disable 最多调度一次 soft-reboot，不做
+无限重试；原始值缺失或不可信时禁止猜测恢复值。
 
 ## 7. 两类制品的安装合同
 

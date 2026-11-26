@@ -116,6 +116,7 @@ fn candidate_paths(manifest: &Path, artifact_dir: Option<&Path>, a: &Artifact) -
         "magiskpolicy" => {
             Some(manifest.join(".xpad2-artifacts/magiskpolicy-v30.7-arm64"))
         }
+        "magisk-resetprop" => Some(manifest.join(".xpad2-artifacts/magisk-v30.7-arm64")),
         _ => None,
     };
     if let Some(path) = mapped {

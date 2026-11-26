@@ -1,3 +1,4 @@
+use crate::adb_install;
 use crate::catalog::Catalog;
 use crate::device;
 use crate::error::{Error, Result, msg, needs_reboot};
@@ -17,6 +18,7 @@ const FULL: &[&str] = &[
     "installer-backup",
     "ksu-manager",
     "boominstaller",
+    "adb-install",
 ];
 const SUU_FULL: &[&str] = &[
     "suu",
@@ -24,6 +26,7 @@ const SUU_FULL: &[&str] = &[
     "installer-backup",
     "suu-manager",
     "boominstaller",
+    "adb-install",
 ];
 const COMPONENT_ORDER: &[&str] = &[
     "ksu",
@@ -35,6 +38,7 @@ const COMPONENT_ORDER: &[&str] = &[
     "ksu-manager",
     "suu-manager",
     "boominstaller",
+    "adb-install",
 ];
 
 pub fn install_components(catalog: &Catalog, paths: &Paths, requested: &[String]) -> Result<()> {
@@ -163,6 +167,19 @@ pub fn install_components(catalog: &Catalog, paths: &Paths, requested: &[String]
             // requested APK transactions have completed.
             install::ensure_installer_backup(catalog.artifact("xpad-installer")?, &mut log)?;
         }
+        if components.iter().any(|id| id == adb_install::ID) {
+            let runtime_id = runtime_id
+                .ok_or_else(|| msg("adb-install installation has no selected KSU/SUU runtime"))?;
+            adb_install::enable_with_runtime(
+                catalog,
+                paths,
+                root_session
+                    .as_ref()
+                    .ok_or_else(|| msg("adb-install installation has no root session"))?,
+                runtime_id,
+                &mut log,
+            )?;
+        }
         Ok(())
     })();
 
@@ -243,7 +260,7 @@ pub fn install_components(catalog: &Catalog, paths: &Paths, requested: &[String]
         }
     }
     if result.is_ok() && components.iter().any(|id| id == "boominstaller") {
-        let state = device::apk_status(catalog.artifact("boominstaller")?);
+        let state = install::boominstaller_status_with_wait(catalog.artifact("boominstaller")?);
         if state.state != ComponentState::Active {
             result = Err(msg(format!(
                 "final BoomInstaller verification failed: {}",
@@ -260,6 +277,15 @@ pub fn install_components(catalog: &Catalog, paths: &Paths, requested: &[String]
                     state.detail.unwrap_or_default()
                 )));
             }
+        }
+    }
+    if result.is_ok() && components.iter().any(|id| id == adb_install::ID) {
+        let state = adb_install::status(paths);
+        if state.state != ComponentState::Active {
+            result = Err(msg(format!(
+                "final adb-install verification failed: {}",
+                state.detail.unwrap_or_default()
+            )));
         }
     }
     if result.is_ok()
@@ -326,7 +352,10 @@ fn normalize(requested: &[String]) -> Result<Vec<String>> {
     if selected.contains("vector") {
         selected.insert("zygisk".to_string());
     }
-    if selected.contains("zygisk") && !selected.contains("ksu") && !selected.contains("suu") {
+    if (selected.contains("zygisk") || selected.contains(adb_install::ID))
+        && !selected.contains("ksu")
+        && !selected.contains("suu")
+    {
         selected.insert("ksu".to_string());
     }
     if selected.contains("ksu") && selected.contains("suu") {
@@ -373,6 +402,27 @@ mod tests {
     #[test]
     fn empty_selection_defaults_to_full() {
         assert_eq!(normalize(&[]).expect("default full"), FULL);
+    }
+
+    #[test]
+    fn full_profiles_enable_adb_install_after_the_other_components() {
+        for bundle in ["full", "suu-full"] {
+            let components = normalize(&[bundle.to_string()]).expect("normalize full profile");
+            assert_eq!(components.last().map(String::as_str), Some(adb_install::ID));
+        }
+    }
+
+    #[test]
+    fn standalone_adb_install_adds_the_default_runtime() {
+        assert_eq!(
+            normalize(&[adb_install::ID.to_string()]).expect("normalize adb-install"),
+            vec!["ksu", adb_install::ID]
+        );
+        assert_eq!(
+            normalize(&["suu".to_string(), adb_install::ID.to_string()])
+                .expect("normalize suu adb-install"),
+            vec!["suu", adb_install::ID]
+        );
     }
 
     #[test]

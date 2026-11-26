@@ -1101,7 +1101,7 @@ mod tests {
         .unwrap();
         assert_eq!(legacy.schema, 1);
         assert_eq!(legacy.product_version, env!("CARGO_PKG_VERSION"));
-        assert_eq!(legacy.catalog_version, "2026-11-24.1");
+        assert_eq!(legacy.catalog_version, "2026-11-26.1");
         assert!(legacy.profile.build_fingerprint.contains("/260:"));
         assert_eq!(legacy.profile.kernel_release_prefix, "4.19.191");
         assert_eq!(legacy.profile.abi, "arm64-v8a");

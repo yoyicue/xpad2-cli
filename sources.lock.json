@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "product_version": "0.7.8",
+  "product_version": "0.8.0",
   "sources": [
     {
       "component": "ionstack",
@@ -118,6 +118,15 @@
       "commit": "e8a58776f1d7bdf852072ad0baa6eceb9a1e4aac",
       "tag": "v30.7",
       "artifact": "Magisk-v30.7.apk!/lib/arm64-v8a/libmagiskpolicy.so",
+      "license": "GPL-3.0-only"
+    },
+    {
+      "component": "magisk-resetprop",
+      "repository": "https://github.com/topjohnwu/Magisk",
+      "version": "v30.7",
+      "commit": "e8a58776f1d7bdf852072ad0baa6eceb9a1e4aac",
+      "tag": "v30.7",
+      "artifact": "Magisk-v30.7.apk!/lib/arm64-v8a/libmagisk.so",
       "license": "GPL-3.0-only"
     }
   ]

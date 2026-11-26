@@ -3,7 +3,7 @@ use crate::catalog::{Catalog, ResolvedArtifact};
 use crate::device;
 use crate::error::{IoContext, Result, msg, needs_reboot};
 use crate::logging::TransactionLog;
-use crate::model::{ApkIdentity, ApksBundleIdentity, Artifact, ComponentState};
+use crate::model::{ApkIdentity, ApksBundleIdentity, Artifact, ComponentState, ComponentStatus};
 use crate::root::RootSession;
 use crate::util::{
     Paths, atomic_write, copy_atomic, safe_filename, sha256_bytes, sha256_file, shell_quote,
@@ -309,15 +309,9 @@ fn wait_runtime_control_plane(
     }
 }
 
-pub fn install_locked_apk(
-    catalog: &Catalog,
-    paths: &Paths,
-    id: &str,
-    log: &mut TransactionLog,
-) -> Result<bool> {
-    let artifact = catalog.artifact(id)?;
+pub fn boominstaller_status_with_wait(artifact: &Artifact) -> ComponentStatus {
     let mut current = device::apk_status(artifact);
-    if id == "boominstaller" && current.state == ComponentState::Ready {
+    if current.state == ComponentState::Ready {
         println!("BoomInstaller 本地 ADB 自启动正在收敛，最多等待 60 秒…");
         for _ in 0..60 {
             thread::sleep(Duration::from_secs(1));
@@ -327,6 +321,21 @@ pub fn install_locked_apk(
             }
         }
     }
+    current
+}
+
+pub fn install_locked_apk(
+    catalog: &Catalog,
+    paths: &Paths,
+    id: &str,
+    log: &mut TransactionLog,
+) -> Result<bool> {
+    let artifact = catalog.artifact(id)?;
+    let current = if id == "boominstaller" {
+        boominstaller_status_with_wait(artifact)
+    } else {
+        device::apk_status(artifact)
+    };
     let needs_activation = id == "boominstaller"
         && matches!(
             current.state,

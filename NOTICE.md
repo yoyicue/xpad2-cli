@@ -28,6 +28,9 @@ separate processes/files at runtime. Their exact binary and source identities ar
   parasitic Manager, and `xposed_file`/`xposed_data` rules without upstream wildcard `allow *`
   or `unlabeled` rules), and revokes those rules when hooks are disabled. No built-in Magisk
   policy bundle is applied.
+- Magisk v30.7 multi-call binary: GPL-3.0-only, extracted unchanged from the same official APK
+  and independently hash-locked. `xpad2` invokes only its `resetprop` applet for the managed
+  `ro.genie.gota.version` current-boot policy; it does not install Magisk or apply a Magisk policy.
 - Rust dependencies retain their own licenses. The release package contains an inventory and
   the license files collected from the exact crate sources selected by `Cargo.lock`.
 
